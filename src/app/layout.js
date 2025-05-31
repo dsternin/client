@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
+import '@fontsource/cormorant-garamond/700.css';
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -21,7 +22,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body>
         <Header />
         {children}
         <Footer />

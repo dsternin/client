@@ -1,0 +1,29 @@
+.header {
+  font-family: "Cormorant Garamond", serif;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background-color: rgba(248, 244, 239, 0.75); 
+  backdrop-filter: blur(4px);
+}
+
+.container {
+  max-width: 80rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.logoLink {
+  text-decoration: none;
+}
+
+.title {
+  font-family: "Georgia", serif;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: 0.02em;
+}
