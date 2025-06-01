@@ -1,11 +1,10 @@
 .header {
-  font-family: "Cormorant Garamond", serif;
   position: sticky;
   top: 0;
   z-index: 1000;
   width: 100%;
   padding: 1rem 1.5rem;
-  background-color: rgba(248, 244, 239, 0.75); 
+  background-color: rgba(248, 244, 239, 0.75);
   backdrop-filter: blur(4px);
 }
 
@@ -17,12 +16,22 @@
   justify-content: flex-start;
 }
 
-.logoLink {
+.loginLink {
+  font-size: larger;
+  font-weight: 500;
+  color: #2d1d0f;
   text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+}
+
+.loginLink:hover {
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .title {
-  font-family: "Georgia", serif;
+  font-family: "Cormorant Garamond", serif !important;
   font-weight: 600;
   color: #1a1a1a;
   letter-spacing: 0.02em;
