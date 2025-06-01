@@ -8,21 +8,21 @@ import FormWrapper from "../FormWrapper/FormWrapper";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const router = useRouter();
 
   const handleEmailChange = (e) => {
-    setError("");
     setEmail(e.target.value);
   };
 
   const handlePasswordChange = (e) => {
-    setError("");
     setPassword(e.target.value);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log({ email, password });
+    fetch("/api/login", { method: "POST", body: "{}" });
   };
 
   return (
@@ -56,7 +56,7 @@ export default function LoginPage() {
         </Button>
         <Button
           variant="contained"
-          onClick={() => router.push("/signup")}
+          onClick={() => router.push("/login")}
           fullWidth
           sx={{ mt: 1 }}
         >
