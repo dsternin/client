@@ -1,13 +1,24 @@
 "use client";
 
-import { Button } from "@mui/material";
+import { Button, TextField } from "@mui/material";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import FormWrapper from "../FormWrapper/FormWrapper";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const router = useRouter();
+
+  const handleEmailChange = (e) => {
+    setError("");
+    setEmail(e.target.value);
+  };
+
+  const handlePasswordChange = (e) => {
+    setError("");
+    setPassword(e.target.value);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -15,34 +26,36 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ maxWidth: 400, margin: "2rem auto", padding: "1rem" }}>
-      <h1 style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>Вход</h1>
+    <FormWrapper title={"Вход"}>
       <form
         onSubmit={handleSubmit}
         style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
       >
-        <input
+        <TextField
+          label="Электронная почта"
+          name="email"
           type="email"
-          placeholder="Ел. почта"
+          fullWidth
+          margin="normal"
+          required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
+          onChange={handleEmailChange}
         />
-        <input
+        <TextField
+          label="Пароль"
+          name="password"
           type="password"
-          placeholder="Пароль"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          fullWidth
+          margin="normal"
           required
+          onChange={handlePasswordChange}
+          value={password}
         />
-        <Button
-          type="submit"
-          style={{ padding: "0.5rem 1rem", fontWeight: 600 }}
-        >
+        <Button variant="contained" type="submit" fullWidth sx={{ mt: 2 }}>
           Войти
         </Button>
         <Button
-          variant="text"
+          variant="contained"
           onClick={() => router.push("/signup")}
           fullWidth
           sx={{ mt: 1 }}
@@ -50,6 +63,6 @@ export default function LoginPage() {
           Создать акаунт
         </Button>
       </form>
-    </main>
+    </FormWrapper>
   );
 }
