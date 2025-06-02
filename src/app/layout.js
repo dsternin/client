@@ -1,5 +1,4 @@
 "use client";
-import { Geist, Geist_Mono } from "next/font/google";
 import "@fontsource/cormorant-garamond/700.css";
 import "./globals.css";
 import Header from "@/components/Header";

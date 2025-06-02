@@ -75,7 +75,6 @@ const Tiptap = () => {
           onClick={() => {
             const current = editor?.getAttributes("paragraph").class || "";
             const next = current.includes("no-indent") ? "" : "no-indent";
-            console.log(next);
 
             editor
               ?.chain()

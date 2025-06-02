@@ -4,10 +4,12 @@ import { Button, TextField } from "@mui/material";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import FormWrapper from "../FormWrapper/FormWrapper";
+import ErrorText from "../ErrorText";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const router = useRouter();
 
@@ -19,10 +21,26 @@ export default function LoginPage() {
     setPassword(e.target.value);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log({ email, password });
-    fetch("/api/login", { method: "POST", body: "{}" });
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Ошибка входа");
+        return;
+      }
+
+      router.push("/"); // або інша захищена сторінка
+    } catch (err) {
+      setError("Сетевая ошибка");
+    }
   };
 
   return (
@@ -51,12 +69,13 @@ export default function LoginPage() {
           onChange={handlePasswordChange}
           value={password}
         />
+        <ErrorText variant="body1">{error}</ErrorText>
         <Button variant="contained" type="submit" fullWidth sx={{ mt: 2 }}>
           Войти
         </Button>
         <Button
           variant="contained"
-          onClick={() => router.push("/login")}
+          onClick={() => router.push("/signup")}
           fullWidth
           sx={{ mt: 1 }}
         >

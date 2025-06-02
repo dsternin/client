@@ -2,7 +2,6 @@ const TEXT = `<h1>Вступление к троекнижью</h1><p>Бог с�
 
 const dedication = "женщине, которая умеет терпеть и любить";
 export async function GET(request) {
-  console.log("Get");
 
   return new Response(JSON.stringify({ message: TEXT, dedication }), {
     status: 200,

@@ -33,7 +33,7 @@ export default function SignupForm() {
     setConfirmPassword(e.target.value);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (name.length < 3) {
       setError("Имя слишком короткое");
@@ -45,12 +45,25 @@ export default function SignupForm() {
       return;
     }
 
-    console.log("Регистрация с данными:", {
-      name,
-      email,
-      password,
-    });
-    // TODO: отправка данных на API
+    try {
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Ошибка регистрации");
+        return;
+      }
+
+      // Успішна реєстрація
+      router.push("/login");
+    } catch (err) {
+      setError("Сетевая ошибка");
+    }
   };
 
   return (
@@ -95,7 +108,7 @@ export default function SignupForm() {
           onChange={handleConfirmPasswordChange}
           value={confirmPassword}
         />
-        {error ? <ErrorText variant="body1">{error}</ErrorText> : null}
+        <ErrorText variant="body1">{error}</ErrorText>
         <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>
           Зарегистрироваться
         </Button>

@@ -1,28 +1,56 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import { cookies } from "next/headers";
+import { UserSchema } from "@/app/models/user";
+import mongoose from "mongoose";
+import dbConnect from "@/lib/db";
+import bcrypt from "bcrypt";
 
-export async function POST(request) {
-  const { email, password } = await request.json();
-  console.log(process.env.JWT_SECRET);
+const User = mongoose.models.User || mongoose.model("User", UserSchema);
 
-  // TODO: валідація через базу
-  // const isValid = email === "test@example.com" && password === "123456";
+export async function POST(req) {
+  try {
+    const { email, password } = await req.json();
 
-  // if (!isValid) {
-  //   return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-  // }
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Введите email и пароль" },
+        { status: 400 }
+      );
+    }
 
-  const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-    expiresIn: "1d",
-  });
+    await dbConnect();
 
-  (await cookies()).set("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-  });
+    const user = await User.findOne({ email });
+    if (!user) {
+      return NextResponse.json(
+        { error: "Пользователь не найден" },
+        { status: 404 }
+      );
+    }
 
-  return NextResponse.json({ message: "Login successful" });
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+      return NextResponse.json({ error: "Неверный пароль" }, { status: 401 });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, name: user.name },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    const response = NextResponse.json({ message: "Успешный вход" });
+    response.cookies.set("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 60 * 60 * 24, // 1 день
+    });
+
+    return response;
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
+  }
 }

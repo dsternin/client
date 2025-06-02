@@ -4,8 +4,12 @@ import Link from "next/link";
 import styles from "./Header.module.css";
 import { Typography } from "@mui/material";
 import { Link as MuiLink } from "@mui/material";
+import { useAuth } from "@/hooks/useAuth";
+import LinkButton from "../LinkButton";
 
 export default function Header() {
+  const { user } = useAuth();
+
   return (
     <header className={styles.header}>
       <div className={styles.container}>
@@ -19,10 +23,33 @@ export default function Header() {
             Трикнижье
           </Typography>
         </MuiLink>
+
         <div style={{ marginLeft: "auto" }}>
-          <Link href="/login" className={styles.loginLink}>
-            Войти
-          </Link>
+          {user ? (
+            <>
+              <h2
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  margin: 0,
+                }}
+              >
+                Приветсвуем, {user.name}
+              </h2>
+              <LinkButton
+                style={{ backgroundColor: "transparent" }}
+                href="/logout"
+                className={styles.loginLink}
+              >
+                Выйти
+              </LinkButton>
+            </>
+          ) : (
+            <Link href="/login" className={styles.loginLink}>
+              Войти
+            </Link>
+          )}
         </div>
       </div>
     </header>
