@@ -4,11 +4,13 @@ import Link from "next/link";
 import styles from "./Header.module.css";
 import { Typography } from "@mui/material";
 import { Link as MuiLink } from "@mui/material";
-import { useAuth } from "@/hooks/useAuth";
 import LinkButton from "../LinkButton";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/store/AuthContext";
 
 export default function Header() {
-  const { user } = useAuth();
+  const { user, reset } = useAuth();
+  const router = useRouter();
 
   return (
     <header className={styles.header}>
@@ -38,8 +40,13 @@ export default function Header() {
                 Приветсвуем, {user.name}
               </h2>
               <LinkButton
+                onClick={() => {
+                  fetch("/api/logout").then(() => {
+                    reset();
+                    router.push("/");
+                  });
+                }}
                 style={{ backgroundColor: "transparent" }}
-                href="/logout"
                 className={styles.loginLink}
               >
                 Выйти

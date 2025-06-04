@@ -5,12 +5,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import FormWrapper from "../FormWrapper/FormWrapper";
 import ErrorText from "../ErrorText";
+import { useAuth } from "@/store/AuthContext";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-
+  const { reset } = useAuth();
   const router = useRouter();
 
   const handleEmailChange = (e) => {
@@ -36,8 +37,8 @@ export default function LoginPage() {
         setError(data.error || "Ошибка входа");
         return;
       }
-
-      router.push("/"); // або інша захищена сторінка
+      reset();
+      router.push("/");
     } catch (err) {
       setError("Сетевая ошибка");
     }

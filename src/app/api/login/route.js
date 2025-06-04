@@ -33,11 +33,9 @@ export async function POST(req) {
       return NextResponse.json({ error: "Неверный пароль" }, { status: 401 });
     }
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, name: user.name },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1d",
+    });
 
     const response = NextResponse.json({ message: "Успешный вход" });
     response.cookies.set("token", token, {
