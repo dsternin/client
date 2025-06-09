@@ -4,10 +4,12 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import TipTapButtons from "./TipTapButtons";
 import { useSearchParams } from "next/navigation";
 import getEditorExtensions from "@/lib/tiptapExtensions";
+import { useEffect, useState } from "react";
 
 const Tiptap = () => {
   const searchParams = useSearchParams();
   const section = searchParams.get("section");
+
   async function save() {
     if (!editor || !section) return;
 
@@ -36,8 +38,16 @@ const Tiptap = () => {
   const editor = useEditor({
     extensions: getEditorExtensions(),
     immediatelyRender: false,
-    content: "<p>Начните писать здесь...</p>",
+    content: "Загрузка",
   });
+
+  useEffect(() => {
+    fetch("/api/content/intro")
+      .then((res) => res.json())
+      .then((data) => {
+        editor?.commands.setContent(data.content);
+      });
+  }, [editor]);
 
   return (
     <div>
