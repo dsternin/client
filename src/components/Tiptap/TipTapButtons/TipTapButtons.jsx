@@ -7,12 +7,39 @@ export default function TipTapButtons({ editor, save }) {
     save();
   };
 
-  // const insertImage = () => {
-  //   const url = prompt("Вставьте URL изображения:");
-  //   if (url) {
-  //     editor?.chain().focus().setImage({ src: url }).run();
-  //   }
-  // };
+  const insertImage = async () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/api/content/image", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (data.url) {
+          editor?.chain().focus().setImage({ src: data.url }).run();
+        } else {
+          alert("Ошибка загрузки изображения");
+        }
+      } catch (err) {
+        console.error("Image upload failed:", err);
+        alert("Ошибка загрузки изображения");
+      }
+    };
+
+    input.click();
+  };
 
   return (
     <Box
@@ -54,9 +81,9 @@ export default function TipTapButtons({ editor, save }) {
       >
         H2
       </Button>
-      {/* <Button variant="outlined" onClick={insertImage}>
+      <Button variant="outlined" onClick={insertImage}>
         Вставить картинку
-      </Button> */}
+      </Button>
       <Button
         variant="outlined"
         onClick={() => {

@@ -36,7 +36,6 @@ export async function POST(req) {
 
     const body = await req.json();
     const { content } = body;
-    console.log(content);
 
     if (!content) {
       return NextResponse.json({ error: "Контент пустой" }, { status: 400 });

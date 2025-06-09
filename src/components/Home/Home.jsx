@@ -1,17 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+// import ReadonlyViewer from "../ReadonlyViewer";
+
+const ReadonlyViewer = dynamic(() => import("../ReadonlyViewer"), {
+  ssr: false,
+});
 
 export default function Home() {
-  const [text, setText] = useState("");
-  const [dedication, setDedication] = useState("");
+  const [content, setContent] = useState("");
   useEffect(() => {
-    fetch("/api/intro")
+    fetch("/api/content/intro")
       .then((res) => res.json())
       .then((data) => {
-        setText(data.message);
-        setDedication(data.dedication);
+        setContent(data.content);
       });
   }, []);
   return (
@@ -19,8 +23,7 @@ export default function Home() {
       <div style={{ display: "flex", justifyContent: "center" }}>
         <Image alt="sky" width={500} height={500 * 0.6} src="/oblako.jpg" />
       </div>
-      {/* <p>"{dedication}"</p> */}
-      <div dangerouslySetInnerHTML={{ __html: text }} />
+      {content ? <ReadonlyViewer content={content} /> : "Загрузка"}
     </>
   );
 }

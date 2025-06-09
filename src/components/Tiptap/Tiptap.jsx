@@ -1,12 +1,9 @@
 "use client";
 
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
-import TextAlign from "@tiptap/extension-text-align";
-import CustomParagraph from "./extensions/CustomParagraph";
 import TipTapButtons from "./TipTapButtons";
 import { useSearchParams } from "next/navigation";
+import getEditorExtensions from "@/lib/tiptapExtensions";
 
 const Tiptap = () => {
   const searchParams = useSearchParams();
@@ -31,25 +28,14 @@ const Tiptap = () => {
 
       const data = await res.json();
       alert("Сохранено успешно!");
-      console.log(data);
     } catch (err) {
       console.error(err);
       alert("Не удалось сохранить.");
     }
   }
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [1, 2],
-        },
-      }),
-      CustomParagraph,
-      Image,
-      TextAlign.configure({
-        types: ["heading", "paragraph"],
-      }),
-    ],
+    extensions: getEditorExtensions(),
+    immediatelyRender: false,
     content: "<p>Начните писать здесь...</p>",
   });
 

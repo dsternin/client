@@ -1,0 +1,57 @@
+{
+  "_id": { "$oid": "6840b2c5557ec71cfae2e7c2" },
+  "section": "intro",
+  "__v": { "$numberInt": "0" },
+  "content": {
+    "type": "doc",
+    "content": [
+      { "type": "paragraph", "attrs": { "textAlign": null, "class": null } },
+      {
+        "type": "customImage",
+        "attrs": {
+          "src": "/api/content/image/6847238c7e3ab45d404de638",
+          "alt": null,
+          "title": null,
+          "width": { "$numberInt": "300" },
+          "height": { "$numberInt": "200" },
+          "alignment": "center"
+        }
+      },
+      {
+        "type": "paragraph",
+        "attrs": { "textAlign": null, "class": null },
+        "content": [{ "type": "text", "text": "Начните писать здесь...sfb" }]
+      },
+      { "type": "paragraph", "attrs": { "textAlign": null, "class": null } },
+      {
+        "type": "customImage",
+        "attrs": {
+          "src": "http://localhost:3000/api/content/image/6847239d7e3ab45d404de63b",
+          "alt": null,
+          "title": null,
+          "width": { "$numberInt": "300" },
+          "height": { "$numberInt": "200" },
+          "alignment": "left"
+        }
+      },
+      {
+        "type": "paragraph",
+        "attrs": { "textAlign": null, "class": null },
+        "content": [{ "type": "text", "text": "adada sdfwf   " }]
+      },
+      {
+        "type": "customImage",
+        "attrs": {
+          "src": "/api/content/image/684723bb7e3ab45d404de63e",
+          "alt": null,
+          "title": null,
+          "width": { "$numberInt": "300" },
+          "height": { "$numberInt": "200" },
+          "alignment": "right"
+        }
+      }
+    ]
+  },
+  "createdAt": { "$date": { "$numberLong": "1749070532657" } },
+  "updatedAt": { "$date": { "$numberLong": "1749492701058" } }
+}
