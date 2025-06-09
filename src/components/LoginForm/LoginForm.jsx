@@ -7,7 +7,7 @@ import FormWrapper from "../FormWrapper/FormWrapper";
 import ErrorText from "../ErrorText";
 import { useAuth } from "@/store/AuthContext";
 
-export default function LoginPage() {
+export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
