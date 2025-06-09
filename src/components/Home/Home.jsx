@@ -20,9 +20,9 @@ export default function Home() {
   }, []);
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "center" }}>
+      {/* <div style={{ display: "flex", justifyContent: "center" }}>
         <Image alt="sky" width={500} height={500 * 0.6} src="/oblako.jpg" />
-      </div>
+      </div> */}
       {content ? <ReadonlyViewer content={content} /> : "Загрузка"}
     </>
   );
