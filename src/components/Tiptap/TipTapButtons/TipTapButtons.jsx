@@ -1,10 +1,21 @@
 "use client";
 
-import { Box, Button } from "@mui/material";
+import { Box, Button, Menu, MenuItem } from "@mui/material";
+import { useState } from "react";
 
 export default function TipTapButtons({ editor, save }) {
+  const [headingAnchor, setHeadingAnchor] = useState(null);
+  const [anchorEl, setAnchorEl] = useState(null);
   const handleExport = () => {
     save();
+  };
+  const handleHeadingClick = (event) => {
+    setHeadingAnchor(event.currentTarget);
+  };
+
+  const handleHeadingSelect = (level) => {
+    editor?.chain().focus().toggleHeading({ level }).run();
+    setHeadingAnchor(null);
   };
 
   const insertImage = async () => {
@@ -41,6 +52,25 @@ export default function TipTapButtons({ editor, save }) {
     input.click();
   };
 
+  const rainbowColors = [
+    "#ff0000",
+    "#ff7f00",
+    "#ffff00",
+    "#00ff00",
+    "#00bfff",
+    "#0000cd",
+    "#8000ff",
+  ];
+
+  const handleColorClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleColorSelect = (color) => {
+    editor?.chain().focus().setColor(color).run();
+    setAnchorEl(null);
+  };
+
   return (
     <Box
       sx={{
@@ -54,38 +84,39 @@ export default function TipTapButtons({ editor, save }) {
       }}
     >
       <Button
-        variant="outlined"
+        color="primary"
+        variant="contained"
         onClick={() => editor?.chain().focus().toggleBold().run()}
       >
         Жирный
       </Button>
       <Button
-        variant="outlined"
+        color="primary"
+        variant="contained"
         onClick={() => editor?.chain().focus().toggleItalic().run()}
       >
         Курсив
       </Button>
-      <Button
-        variant="outlined"
-        onClick={() =>
-          editor?.chain().focus().toggleHeading({ level: 1 }).run()
-        }
-      >
-        H1
+      <Button variant="contained" color="primary" onClick={handleHeadingClick}>
+        Заголовок
       </Button>
-      <Button
-        variant="outlined"
-        onClick={() =>
-          editor?.chain().focus().toggleHeading({ level: 2 }).run()
-        }
+      <Menu
+        anchorEl={headingAnchor}
+        open={Boolean(headingAnchor)}
+        onClose={() => setHeadingAnchor(null)}
       >
-        H2
-      </Button>
-      <Button variant="outlined" onClick={insertImage}>
+        {[1, 2, 3].map((level) => (
+          <MenuItem key={level} onClick={() => handleHeadingSelect(level)}>
+            Заголовок H{level}
+          </MenuItem>
+        ))}
+      </Menu>
+      <Button color="primary" variant="contained" onClick={insertImage}>
         Вставить картинку
       </Button>
       <Button
-        variant="outlined"
+        variant="contained"
+        color="primary"
         onClick={() => {
           const current = editor?.getAttributes("paragraph").class || "";
           const next = current.includes("no-indent") ? "" : "no-indent";
@@ -99,37 +130,58 @@ export default function TipTapButtons({ editor, save }) {
         Без отступа
       </Button>
       <Button
-        variant="outlined"
+        variant="contained"
+        color="primary"
         onClick={() => editor?.chain().focus().setTextAlign("left").run()}
       >
         Влево
       </Button>
       <Button
-        variant="outlined"
+        variant="contained"
+        color="primary"
         onClick={() => editor?.chain().focus().setTextAlign("center").run()}
       >
         По центру
       </Button>
       <Button
-        variant="outlined"
+        variant="contained"
+        color="primary"
         onClick={() => editor?.chain().focus().setTextAlign("right").run()}
       >
         Вправо
       </Button>
-      <Button variant="contained" color="primary" onClick={handleExport}>
+
+      <Button variant="contained" onClick={handleColorClick}>
+        Цвет текста
+      </Button>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={() => setAnchorEl(null)}
+      >
+        {rainbowColors.map((color) => (
+          <MenuItem
+            key={color}
+            onClick={() => handleColorSelect(color)}
+            sx={{ padding: 0 }}
+          >
+            <Box
+              sx={{
+                backgroundColor: color,
+                width: 30,
+                height: 30,
+                margin: 1,
+                borderRadius: "4px",
+                border: "1px solid #ccc",
+                cursor: "pointer",
+              }}
+            />
+          </MenuItem>
+        ))}
+      </Menu>
+      <Button variant="contained" onClick={handleExport} color="success">
         Сохранить
       </Button>
-      {/* <Button
-        variant="contained"
-        color="primary"
-        onClick={() => {
-          const html = editor?.getHTML();
-          console.log(html);
-          alert("HTML вивантажено. Перевірте консоль.");
-        }}
-      >
-        Вивантажити HTML
-      </Button> */}
     </Box>
   );
 }

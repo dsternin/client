@@ -13,6 +13,7 @@
     "@emotion/styled": "^11.14.0",
     "@fontsource/cormorant-garamond": "^5.2.7",
     "@mui/material": "^7.1.0",
+    "@tiptap/extension-color": "^2.14.0",
     "@tiptap/extension-image": "^2.12.0",
     "@tiptap/extension-text-align": "^2.12.0",
     "@tiptap/pm": "^2.12.0",

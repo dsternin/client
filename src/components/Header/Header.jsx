@@ -37,7 +37,7 @@ export default function Header() {
                   margin: 0,
                 }}
               >
-                Приветсвуем, {user.name}
+                Приветствуем, {user.name}
               </h2>
               <LinkButton
                 onClick={() => {

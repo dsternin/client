@@ -141,30 +141,42 @@ export function CustomImageComponent({ node, updateAttributes, editor }) {
         </button>
       </div>
 
-      <ResizableBox
-        width={width}
-        height={height}
-        onResizeStop={(e, data) => {
-          updateAttributes({
-            width: data.size.width,
-            height: data.size.height,
-          });
-        }}
-        resizeHandles={["se"]}
-        minConstraints={[50, 50]}
-      >
+      {readOnly ? (
         <img
           src={src}
           style={{
-            width: "100%",
-            height: "100%",
+            width: `${width}px`,
+            height: `${height}px`,
             objectFit: "contain",
             display: "block",
           }}
           contentEditable={false}
         />
-      </ResizableBox>
-
+      ) : (
+        <ResizableBox
+          width={width}
+          height={height}
+          onResizeStop={(e, data) => {
+            updateAttributes({
+              width: data.size.width,
+              height: data.size.height,
+            });
+          }}
+          resizeHandles={["se"]}
+          minConstraints={[50, 50]}
+        >
+          <img
+            src={src}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: "block",
+            }}
+            contentEditable={false}
+          />
+        </ResizableBox>
+      )}
       <NodeViewContent />
     </NodeViewWrapper>
   );
