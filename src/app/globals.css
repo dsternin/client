@@ -1,4 +1,5 @@
 body {
+  font-size: 24px;
   height: 100%;
   margin: 0;
   padding: 16px;
@@ -19,6 +20,8 @@ body {
 }
 
 .ProseMirror {
+  font-size: 24px;
+  line-height: 1.6;
   padding: 1rem;
   border-radius: 0.5rem;
   min-height: 300px;
@@ -26,6 +29,7 @@ body {
 }
 
 .ProseMirror p {
+  margin: 0.5em 0;
   text-indent: 2em;
   margin-top: 0.75em;
   margin-bottom: 0.75em;
@@ -34,4 +38,14 @@ body {
 
 .ProseMirror p.no-indent {
   text-indent: 0;
+}
+
+.ProseMirror h1 {
+  font-size: 2.5rem;
+  margin: 1.2em 0 0.6em;
+}
+
+.ProseMirror h2 {
+  font-size: 2rem;
+  margin: 1.1em 0 0.5em;
 }

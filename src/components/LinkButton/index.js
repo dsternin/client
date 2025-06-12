@@ -13,7 +13,7 @@ export default function LinkButton({ children, ...props }) {
           backgroundColor: "transparent",
         },
         fontFamily: "Cormorant Garamond, serif",
-        fontSize: "1.25rem",
+        fontSize: "2.25rem",
       }}
     >
       {children}

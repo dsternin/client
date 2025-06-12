@@ -13,6 +13,16 @@ let theme = createTheme({
       contrastText: "#ffffff",
       dark: "#388e3c",
     },
+    typography: {
+      fontSize: 24,
+      body1: {
+        fontSize: "1rem", 
+      },
+      button: {
+        textTransform: "none",
+        fontSize: "2rem",
+      },
+    },
   },
 });
 

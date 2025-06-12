@@ -21,7 +21,7 @@ export default function Header() {
           underline="none"
           className={styles.logoLink}
         >
-          <Typography variant="h6" component="span" className={styles.title}>
+          <Typography variant="h3" component="span" className={styles.title}>
             Трикнижье
           </Typography>
         </MuiLink>
