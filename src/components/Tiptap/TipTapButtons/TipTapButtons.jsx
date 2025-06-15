@@ -158,15 +158,10 @@ export default function TipTapButtons({ editor, save }) {
           editor
             ?.chain()
             .focus()
-            .insertContent({
-              type: "textBox",
-              attrs: { float: "right" },
-              content: [
-                {
-                  type: "paragraph",
-                  content: [{ type: "text", text: "Текст в рамке" }],
-                },
-              ],
+            .wrapIn("textBox", {
+              backgroundColor: "#f9f9f9",
+              borderColor: "#888",
+              displayStyle: "block",
             })
             .run()
         }
