@@ -6,6 +6,8 @@ import TextAlign from "@tiptap/extension-text-align";
 import TextStyle from "@tiptap/extension-text-style";
 import CustomParagraph from "@/components/Tiptap/extensions/CustomParagraph";
 import CustomImage from "@/components/Tiptap/extensions/CustomImage";
+import Underline from "@tiptap/extension-underline";
+import { TextBox } from "@/components/Tiptap/extensions/TextBox";
 
 export default function getEditorExtensions() {
   return [
@@ -19,6 +21,8 @@ export default function getEditorExtensions() {
     Color.configure({ types: ["textStyle"] }),
     CustomParagraph,
     CustomImage,
+    TextBox,
+    Underline,
     TextAlign.configure({
       types: ["heading", "paragraph"],
     }),

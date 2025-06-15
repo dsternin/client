@@ -8,16 +8,20 @@ const Tiptap = dynamic(() => import("@/components/Tiptap"), { ssr: false });
 
 export default function TextEditorPage() {
   const { user, reset } = useAuth();
+
   const router = useRouter();
   if (user?.role !== "admin") {
-    <Box sx={{ textAlign: "center", mt: 8 }}>
-      <Typography variant="h6" gutterBottom>
-        Этот функционал доступен только администраторам.
-      </Typography>
-      <Button variant="contained" onClick={() => router.push("/login")}>
-        Войти
-      </Button>
-    </Box>;
+    return (
+      <Box sx={{ textAlign: "center", mt: 8 }}>
+        <Typography variant="h6" gutterBottom>
+          Этот функционал доступен только администраторам.
+        </Typography>
+        <Button variant="contained" onClick={() => router.push("/login")}>
+          Войти
+        </Button>
+      </Box>
+    );
+  } else {
   }
   return (
     <Box sx={{ p: 6 }}>
