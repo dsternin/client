@@ -3,6 +3,7 @@
 import { useAuth } from "@/store/AuthContext";
 import { Typography, Button, Stack } from "@mui/material";
 import { useRouter } from "next/navigation";
+import MenuButton from "@/components/MenuButtons";
 
 export default function AdminPanel({ children }) {
   const { user } = useAuth();
@@ -18,15 +19,23 @@ export default function AdminPanel({ children }) {
 
       <Stack spacing={2} direction="column">
         <Button
-          onClick={() => router.push("/textEditor?section=intro")}
+          onClick={() => router.push("/textEditor?book=intro")}
           variant="contained"
           color="primary"
         >
           ✏️ Редактировать вступление
         </Button>
-        <Button variant="contained" color="primary">
-          📚 Редактировать книги
-        </Button>
+
+        <MenuButton
+          label="📚 Редактировать книги"
+          items={{
+            "Теономика и экономика": () => router.push("/textEditor?book=teonomika"),
+            "Динамика пространства и время": () => router.push("/textEditor?book=dinamika"),
+            "Этноландшафт российской Евразии": () => router.push("/textEditor?book=etnolandshaft"),
+          }}
+          buttonProps={{ color: "primary" }}
+        />
+
         <Button variant="contained" color="primary">
           👥 Управление пользователями
         </Button>
