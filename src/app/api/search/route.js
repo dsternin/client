@@ -72,7 +72,7 @@ export async function GET(req) {
 function findWordInTipTapContent(contentArray, search, blockOffset = 0) {
   const matches = [];
   const lowerSearch = search.toLowerCase();
-  
+
   contentArray.forEach((block, blockIndex) => {
     if (block.content) {
       block.content.forEach((child, childIndex) => {

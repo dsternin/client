@@ -11,7 +11,7 @@ import {
 
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 
-export default function Search({ highlight, editor }) {
+export default function Search({ highlight, editor, unsetSearchHighlight }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -51,7 +51,6 @@ export default function Search({ highlight, editor }) {
         `/api/search?book=${book}&section=${section}&query=${query}`
       );
       const { matches, count } = await response.json();
-      console.log(matches);
 
       if (count) {
         const cursorIndex = matches.findIndex((m) => m.section === section);
@@ -77,10 +76,10 @@ export default function Search({ highlight, editor }) {
 
   useEffect(() => {
     if (!count || !matches[cursor] || !editor) return;
+    unsetSearchHighlight();
 
     const { blockIndex, childIndex, charIndex, length } = matches[cursor];
     const doc = editor.getJSON();
-    console.log(doc);
 
     const absolutePos = getAbsolutePosition(
       doc,
@@ -155,8 +154,9 @@ function getAbsolutePosition(doc, blockIndex, childIndex, charIndex) {
 export function getNodeLength(node) {
   if (!node) return;
   if (node.text) return node.text.length;
-  // console.log(node.type);
-  // if (node.type === "hardBreak") return 3
+  if (node.type === "hardBreak") {
+    return 1;
+  }
   if (node.type === "customImage" || node.type === "textBox") return 1;
   if (node.content) {
     return node.content.reduce((sum, child) => sum + getNodeLength(child), 2);

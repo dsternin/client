@@ -10,11 +10,10 @@ export default function Reader({ book = "intro", section = "" }) {
 
   function highlight(start, end) {
     if (!editor || isNaN(start) || isNaN(end)) return;
-    console.log(start, end);
 
     editor.commands.unsetSearchHighlight();
-    // editor.commands.setSearchHighlight(13, 14);
     editor.commands.setSearchHighlight(start, end);
+    // editor.commands.setSearchHighlight(11, 12);
 
     const el = document.getElementById("search-target");
     if (el) {
@@ -33,7 +32,13 @@ export default function Reader({ book = "intro", section = "" }) {
 
   return (
     <>
-      {editor ? <Search highlight={highlight} editor={editor} /> : null}
+      {editor ? (
+        <Search
+          highlight={highlight}
+          unsetSearchHighlight={editor.commands.unsetSearchHighlight}
+          editor={editor}
+        />
+      ) : null}
       <EditorContent editor={editor} />;
     </>
   );
