@@ -9,6 +9,7 @@ import CustomImage from "@/components/Tiptap/extensions/CustomImage";
 import Underline from "@tiptap/extension-underline";
 import { TextBox } from "@/components/Tiptap/extensions/TextBox";
 import CustomHeading from "@/components/Tiptap/extensions/CustomHeading";
+import SearchHighlight from "@/components/Tiptap/extensions/SearchHighlight";
 
 export default function getEditorExtensions() {
   return [
@@ -28,5 +29,6 @@ export default function getEditorExtensions() {
     TextAlign.configure({
       types: ["heading", "paragraph"],
     }),
+    SearchHighlight,
   ];
 }

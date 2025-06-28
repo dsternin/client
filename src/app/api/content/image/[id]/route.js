@@ -3,7 +3,6 @@ import dbConnect from "@/lib/db";
 import { Image } from "@/app/models/image";
 
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
   const id = request.nextUrl.pathname.split("/").pop();
   await dbConnect();
 

@@ -54,3 +54,7 @@ body {
   border: 5px solid;
   padding: 10px;
 }
+
+.search-highlight {
+  background-color: aqua;
+}
