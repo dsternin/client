@@ -7,54 +7,68 @@ import {
   Typography,
   Box,
   CircularProgress,
+  IconButton,
 } from "@mui/material";
-
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
+import SearchIcon from "@mui/icons-material/Search";
+import CloseIcon from "@mui/icons-material/Close";
 
-export default function Search({ highlight, editor, unsetSearchHighlight }) {
+export default function Search({ highlight, editor }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
-  const queryUrl = searchParams.get("query") || "";
-  const [query, setQuery] = useState(queryUrl);
+  const router = useRouter();
+
+  const [queryInput, setQueryInput] = useState("");
   const [matches, setMatches] = useState(null);
   const [count, setCount] = useState(0);
-
   const [cursor, setCursor] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [open, setOpen] = useState(false);
 
-  const applySearch = () => {
-    const params = new URLSearchParams(searchParams);
-    if (query) {
-      params.set("query", query);
-    } else {
-      params.delete("query");
-    }
-    router.push(`${pathname}?${params.toString()}`);
-  };
+  const book = searchParams.get("book");
+  const section = searchParams.get("section");
+  const query = searchParams.get("query") || "";
 
   useEffect(() => {
-    handleSearch();
-  }, [queryUrl]);
+    setQueryInput(query);
+    if (query.trim()) {
+      handleSearch(query);
+      setOpen(true);
+    } else {
+      setMatches(null);
+      setCount(0);
+    }
+  }, [query, book]);
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+  useEffect(() => {
+    if (!count || !matches?.[cursor] || !editor) return;
+
+    const { blockIndex, childIndexPath, charIndex, length } = matches[cursor];
+    const doc = editor.getJSON();
+
+    const absolutePos = getAbsolutePosition(
+      doc,
+      blockIndex,
+      childIndexPath,
+      charIndex
+    );
+    highlight(absolutePos, absolutePos + length);
+  }, [cursor, matches, count, editor]);
+
+  const handleSearch = async (searchQuery) => {
+    if (!searchQuery.trim()) return;
     setLoading(true);
     setError(null);
 
     try {
-      const book = searchParams.get("book");
-      const section = searchParams.get("section");
-
       const response = await fetch(
-        `/api/search?book=${book}&section=${section}&query=${query}`
+        `/api/search?book=${book}&query=${searchQuery}`
       );
       const { matches, count } = await response.json();
-
       if (count) {
-        const cursorIndex = matches.findIndex((m) => m.section === section);
-        setCursor(cursorIndex === -1 ? 0 : cursorIndex);
+        const localIndex = matches.findIndex((m) => m.section === section);
+        setCursor(localIndex === -1 ? 0 : localIndex);
         setMatches(matches);
         setCount(count);
       } else {
@@ -70,94 +84,157 @@ export default function Search({ highlight, editor, unsetSearchHighlight }) {
     }
   };
 
-  function nextMatch() {
-    setCursor((prev) => (prev + 1) % count);
+  const applySearch = () => {
+    const params = new URLSearchParams(searchParams);
+    if (queryInput) {
+      params.set("query", queryInput);
+    } else {
+      params.delete("query");
+    }
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  async function next() {
+    editor?.commands.unsetSearchHighlight();
+    setCursor((prev) => prev + 1);
   }
 
-  useEffect(() => {
-    if (!count || !matches[cursor] || !editor) return;
-    unsetSearchHighlight();
+  async function prev() {
+    editor?.commands.unsetSearchHighlight();
 
-    const { blockIndex, childIndex, charIndex, length } = matches[cursor];
-    const doc = editor.getJSON();
-
-    const absolutePos = getAbsolutePosition(
-      doc,
-      blockIndex,
-      childIndex,
-      charIndex
-    );
-    highlight(absolutePos, absolutePos + length);
-  }, [cursor, matches, count, editor]);
+    setCursor((prev) => prev - 1);
+  }
 
   return (
-    <Box sx={{ maxWidth: 600, mx: "auto", mt: 4 }}>
-      <Typography variant="h5" gutterBottom>
-        Поиск по книгам
-      </Typography>
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <TextField
-          label="Введите слово"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          fullWidth
-        />
-        <Button variant="contained" onClick={applySearch} disabled={loading}>
-          Поиск
+    <>
+      {!open && (
+        <Button
+          variant="contained"
+          startIcon={<SearchIcon />}
+          onClick={() => setOpen(true)}
+          sx={{ position: "fixed", bottom: 16, right: 16, zIndex: 1000 }}
+        >
+          Искать по книгам
         </Button>
-      </Box>
-
-      {loading && <CircularProgress />}
-
-      {count > 0 ? (
-        <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-          <Button
-            variant="outlined"
-            onClick={() => setCursor((prev) => (prev - 1 + count) % count)}
-            disabled={loading}
-          >
-            Назад
-          </Button>
-          <Button variant="outlined" onClick={nextMatch} disabled={loading}>
-            Далее
-          </Button>
-        </Box>
-      ) : null}
-
-      {error && (
-        <Typography color="error" sx={{ mt: 2 }}>
-          {error}
-        </Typography>
       )}
-    </Box>
+
+      {open && (
+        <Box
+          sx={{
+            position: "fixed",
+            bottom: 16,
+            right: 16,
+            width: 320,
+            p: 2,
+            bgcolor: "background.paper",
+            borderRadius: 2,
+            boxShadow: 4,
+            zIndex: 1000,
+          }}
+        >
+          <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+            <Typography variant="h6">Поиск по книгам</Typography>
+            <IconButton
+              size="small"
+              onClick={() => {
+                setOpen(false);
+                editor?.commands.unsetSearchHighlight();
+                setQueryInput("");
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+
+          <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+            <TextField
+              label="Введите слово"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              fullWidth
+              size="small"
+            />
+            <Button
+              variant="contained"
+              onClick={applySearch}
+              disabled={loading}
+            >
+              Поиск
+            </Button>
+          </Box>
+
+          {loading && <CircularProgress size={24} />}
+
+          {count > 0 ? (
+            <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+              <Button
+                variant="outlined"
+                onClick={prev}
+                disabled={loading}
+                fullWidth
+              >
+                Назад
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={next}
+                disabled={loading}
+                fullWidth
+              >
+                Далее
+              </Button>
+            </Box>
+          ) : null}
+
+          {error && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {error}
+            </Typography>
+          )}
+        </Box>
+      )}
+    </>
   );
 }
 
-function getAbsolutePosition(doc, blockIndex, childIndex, charIndex) {
+export function getAbsolutePosition(
+  doc,
+  blockIndex,
+  childIndexPath,
+  charIndex
+) {
   let pos = 1;
+
   for (let i = 0; i < blockIndex; i++) {
     const block = doc.content[i];
     pos += getNodeLength(block);
   }
 
-  const targetBlock = doc.content[blockIndex];
-  if (targetBlock?.content) {
-    for (let j = 0; j < childIndex; j++) {
-      const child = targetBlock.content[j];
-      pos += getNodeLength(child);
+  let currentNode = doc.content[blockIndex];
+  // pos += 1;
+  for (let idx of childIndexPath) {
+    if (currentNode.type === "bulletList" || currentNode.type === "listItem")
+      pos += 1;
+    if (!currentNode.content || !currentNode.content[idx]) break;
+    for (let i = 0; i < idx; i++) {
+      pos += getNodeLength(currentNode.content[i]);
     }
+    currentNode = currentNode.content[idx];
   }
 
   return pos + charIndex;
 }
 
 export function getNodeLength(node) {
-  if (!node) return;
+  if (!node) return 0;
   if (node.text) return node.text.length;
-  if (node.type === "hardBreak") {
+
+  if (
+    node.type === "customImage" ||
+    node.type === "textBox" ||
+    node.type === "hardBreak"
+  )
     return 1;
-  }
-  if (node.type === "customImage" || node.type === "textBox") return 1;
   if (node.content) {
     return node.content.reduce((sum, child) => sum + getNodeLength(child), 2);
   }

@@ -12,8 +12,13 @@ export default function Reader({ book = "intro", section = "" }) {
     if (!editor || isNaN(start) || isNaN(end)) return;
 
     editor.commands.unsetSearchHighlight();
+    console.log(start, end);
+
+    // editor.commands.setSearchHighlight(12, 13);
     editor.commands.setSearchHighlight(start, end);
-    // editor.commands.setSearchHighlight(11, 12);
+    // editor.commands.setSearchHighlight(17, 19);
+
+
 
     const el = document.getElementById("search-target");
     if (el) {

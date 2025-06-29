@@ -74,23 +74,50 @@ function findWordInTipTapContent(contentArray, search, blockOffset = 0) {
   const lowerSearch = search.toLowerCase();
 
   contentArray.forEach((block, blockIndex) => {
-    if (block.content) {
-      block.content.forEach((child, childIndex) => {
-        if (child.text) {
-          const text = child.text.toLowerCase();
-          let pos = -1;
-          while ((pos = text.indexOf(lowerSearch, pos + 1)) !== -1) {
-            matches.push({
-              blockIndex: blockOffset + blockIndex,
-              childIndex,
-              charIndex: pos,
-              length: search.length,
-            });
-          }
-        }
-      });
-    }
+    searchInNode(
+      block,
+      blockOffset + blockIndex,
+      [],
+      lowerSearch,
+      search,
+      matches
+    );
   });
 
   return matches;
+}
+
+function searchInNode(
+  node,
+  globalBlockIndex,
+  childPath,
+  lowerSearch,
+  search,
+  matches
+) {
+  if (node.text) {
+    const text = node.text.toLowerCase();
+    let pos = -1;
+    while ((pos = text.indexOf(lowerSearch, pos + 1)) !== -1) {
+      matches.push({
+        blockIndex: globalBlockIndex,
+        childIndexPath: [...childPath],
+        charIndex: pos,
+        length: search.length,
+      });
+    }
+  }
+
+  if (node.content) {
+    node.content.forEach((child, idx) => {
+      searchInNode(
+        child,
+        globalBlockIndex,
+        [...childPath, idx],
+        lowerSearch,
+        search,
+        matches
+      );
+    });
+  }
 }
