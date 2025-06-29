@@ -7,6 +7,7 @@ import theme from "@/styles/theme";
 import { ThemeProvider } from "@mui/material";
 import { AuthProvider } from "@/store/AuthContext";
 import AdminPanel from "@/components/AdminPanel";
+import BooksToc from "@/components/BooksToc";
 
 export default function RootLayout({ children }) {
   return (
@@ -17,6 +18,7 @@ export default function RootLayout({ children }) {
             {/* <CssBaseline /> */}
             <Header />
             <AdminPanel />
+            <BooksToc />
             <main className="content">{children}</main>
             <Footer />
           </ThemeProvider>
