@@ -213,7 +213,11 @@ export function getAbsolutePosition(
   let currentNode = doc.content[blockIndex];
   // pos += 1;
   for (let idx of childIndexPath) {
-    if (currentNode.type === "bulletList" || currentNode.type === "listItem")
+    if (
+      currentNode.type === "bulletList" ||
+      currentNode.type === "listItem" ||
+      currentNode.type === "textBox"
+    )
       pos += 1;
     if (!currentNode.content || !currentNode.content[idx]) break;
     for (let i = 0; i < idx; i++) {
@@ -229,12 +233,7 @@ export function getNodeLength(node) {
   if (!node) return 0;
   if (node.text) return node.text.length;
 
-  if (
-    node.type === "customImage" ||
-    node.type === "textBox" ||
-    node.type === "hardBreak"
-  )
-    return 1;
+  if (node.type === "customImage" || node.type === "hardBreak") return 1;
   if (node.content) {
     return node.content.reduce((sum, child) => sum + getNodeLength(child), 2);
   }
