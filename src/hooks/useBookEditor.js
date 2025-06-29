@@ -13,7 +13,7 @@ export default function useBookEditor(book, editable) {
 
   useEffect(() => {
     if (!book || !editor) return;
-
+    setIsloaded(false);
     fetch(`/api/content/books?book=${book}`)
       .then(async (res) => {
         if (res.status === 404) {

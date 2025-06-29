@@ -74,7 +74,7 @@ export default function Search({ highlight, editor }) {
       } else {
         setMatches(null);
         setCount(0);
-        setError("Больше результатов не найдено.");
+        setError("В этой книге результатов не найдено.");
       }
     } catch (err) {
       console.error(err);
@@ -94,6 +94,38 @@ export default function Search({ highlight, editor }) {
     router.push(`${pathname}?${params.toString()}`);
   };
 
+  async function searchInNextBook() {
+    const toc = await (await fetch("/api/content/toc")).json();
+    const currentBook = searchParams.get("book");
+
+    const currentIndex = toc.findIndex((b) => b.name === currentBook);
+    const nextBook = toc[(currentIndex + 1) % toc.length];
+
+    if (nextBook?.chapters?.length) {
+      const params = new URLSearchParams(searchParams);
+      params.set("book", nextBook.name);
+      params.set("section", nextBook.chapters[0].title);
+      params.set("query", queryInput);
+      router.push(`${pathname}?${params.toString()}`);
+    }
+  }
+
+  async function searchInPrevBook() {
+    const toc = await (await fetch("/api/content/toc")).json();
+    const currentBook = searchParams.get("book");
+
+    const currentIndex = toc.findIndex((b) => b.name === currentBook);
+    const prevBook = toc[(currentIndex - 1 + toc.length) % toc.length];
+
+    if (prevBook?.chapters?.length) {
+      const params = new URLSearchParams(searchParams);
+      params.set("book", prevBook.name);
+      params.set("section", prevBook.chapters[0].title);
+      params.set("query", queryInput);
+      router.push(`${pathname}?${params.toString()}`);
+    }
+  }
+
   async function next() {
     editor?.commands.unsetSearchHighlight();
     setCursor((prev) => prev + 1);
@@ -101,7 +133,6 @@ export default function Search({ highlight, editor }) {
 
   async function prev() {
     editor?.commands.unsetSearchHighlight();
-
     setCursor((prev) => prev - 1);
   }
 
@@ -124,7 +155,7 @@ export default function Search({ highlight, editor }) {
             position: "fixed",
             bottom: 16,
             right: 16,
-            width: 320,
+            width: 500,
             p: 2,
             bgcolor: "background.paper",
             borderRadius: 2,
@@ -167,24 +198,72 @@ export default function Search({ highlight, editor }) {
 
           {count > 0 ? (
             <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+              {cursor > 0 ? (
+                <Button
+                 sx={{ height: 48 }}
+                  variant="outlined"
+                  onClick={prev}
+                  disabled={loading}
+                  fullWidth
+                >
+                  Назад
+                </Button>
+              ) : (
+                <Button
+                 sx={{ height: 48 }}
+                  variant="outlined"
+                  onClick={searchInPrevBook}
+                  disabled={loading}
+                  fullWidth
+                >
+                  Искать в предыдущей книге
+                </Button>
+              )}
+
+              {cursor < count - 1 ? (
+                <Button
+                 sx={{ height: 48 }}
+                  variant="outlined"
+                  onClick={next}
+                  disabled={loading}
+                  fullWidth
+                >
+                  Далее
+                </Button>
+              ) : (
+                <Button
+                 sx={{ height: 48 }}
+                  variant="outlined"
+                  onClick={searchInNextBook}
+                  disabled={loading}
+                  fullWidth
+                >
+                  Искать в следующей книге
+                </Button>
+              )}
+            </Box>
+          ) : (
+            <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
               <Button
+                sx={{ height: 48 }}
                 variant="outlined"
-                onClick={prev}
+                onClick={searchInPrevBook}
                 disabled={loading}
                 fullWidth
               >
-                Назад
+                Искать в предыдущей книге
               </Button>
               <Button
+                sx={{ height: 48 }}
                 variant="outlined"
-                onClick={next}
+                onClick={searchInNextBook}
                 disabled={loading}
                 fullWidth
               >
-                Далее
+                Искать в следующей книге
               </Button>
             </Box>
-          ) : null}
+          )}
 
           {error && (
             <Typography color="error" sx={{ mt: 2 }}>
@@ -211,15 +290,16 @@ export function getAbsolutePosition(
   }
 
   let currentNode = doc.content[blockIndex];
-  // pos += 1;
   for (let idx of childIndexPath) {
+    if (!currentNode || !currentNode.content || !currentNode.content[idx])
+      break;
     if (
       currentNode.type === "bulletList" ||
       currentNode.type === "listItem" ||
       currentNode.type === "textBox"
-    )
+    ) {
       pos += 1;
-    if (!currentNode.content || !currentNode.content[idx]) break;
+    }
     for (let i = 0; i < idx; i++) {
       pos += getNodeLength(currentNode.content[i]);
     }
