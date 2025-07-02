@@ -4,14 +4,14 @@ import { createTheme } from "@mui/material/styles";
 let theme = createTheme({
   palette: {
     primary: {
-      main: "#f5c518",
-      contrastText: "#000000",
-      dark: "#e6b800",
+      main: "#4caf50", // насичений холодний зелений (основний колір)
+      contrastText: "#ffffff",
+      dark: "#388e3c", // темніший холодний зелений
     },
     success: {
-      main: "#4caf50",
-      contrastText: "#ffffff",
-      dark: "#388e3c",
+      main: "#81c784", // м'який ментолово-зелений
+      contrastText: "#000000",
+      dark: "#519657",
     },
     typography: {
       fontSize: 26,

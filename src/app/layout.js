@@ -18,7 +18,6 @@ export default function RootLayout({ children }) {
             {/* <CssBaseline /> */}
             <Header />
             <AdminPanel />
-            <BooksToc />
             <main className="content">{children}</main>
             <Footer />
           </ThemeProvider>

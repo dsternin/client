@@ -7,6 +7,7 @@ import { Link as MuiLink } from "@mui/material";
 import LinkButton from "../LinkButton";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/store/AuthContext";
+import BooksToc from "../BooksToc";
 
 export default function Header() {
   const { user, reset } = useAuth();
@@ -25,7 +26,7 @@ export default function Header() {
             Трикнижье
           </Typography>
         </MuiLink>
-
+        <BooksToc />
         <div style={{ marginLeft: "auto" }}>
           {user ? (
             <>
