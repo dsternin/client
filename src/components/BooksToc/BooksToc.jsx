@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Typography,
   List,
@@ -15,16 +15,11 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Link from "next/link";
+import useToc from "@/hooks/useToc";
 
 export default function BooksToc() {
-  const [toc, setToc] = useState([]);
+  const toc = useToc();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/content/toc")
-      .then((res) => res.json())
-      .then((data) => setToc(data));
-  }, []);
 
   return (
     <>

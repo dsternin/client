@@ -30,16 +30,6 @@ export default function Header() {
         <div style={{ marginLeft: "auto" }}>
           {user ? (
             <>
-              <h2
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  margin: 0,
-                }}
-              >
-                Приветствуем, {user.name}
-              </h2>
               <LinkButton
                 onClick={() => {
                   fetch("/api/logout").then(() => {
@@ -50,7 +40,7 @@ export default function Header() {
                 style={{ backgroundColor: "transparent" }}
                 className={styles.loginLink}
               >
-                Выйти
+                {`Вы вошли как ${user.name} | Выйти`}
               </LinkButton>
             </>
           ) : (

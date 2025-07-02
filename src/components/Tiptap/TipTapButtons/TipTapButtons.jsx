@@ -4,8 +4,11 @@ import MenuButton from "@/components/MenuButtons";
 import { Box, Button } from "@mui/material";
 import TextBoxControls from "../extensions/TextBoxControl";
 import { rainbowColors } from "@/lib/colors";
+import { useState } from "react";
+import ChapterLinkDialog from "@/components/ChapterLinkDialog";
 
 export default function TipTapButtons({ editor, save }) {
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const handleExport = () => {
     save();
   };
@@ -150,7 +153,25 @@ export default function TipTapButtons({ editor, save }) {
           )
         }
       />
-
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={() => setLinkDialogOpen(true)}
+      >
+        Добавить ссылку на главу книги
+      </Button>
+      <ChapterLinkDialog
+        open={linkDialogOpen}
+        onClose={() => setLinkDialogOpen(false)}
+        onInsert={(url) => {
+          editor
+            ?.chain()
+            .focus()
+            .extendMarkRange("link")
+            .setLink({ href: url })
+            .run();
+        }}
+      />
       <Button
         variant="contained"
         color="primary"
