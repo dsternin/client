@@ -51,7 +51,7 @@ export default function Reader({ book = "intro", section = "" }) {
           editor={editor}
         />
       ) : null}
-      <EditorContent editor={editor} />;
+      <EditorContent editor={editor} />
     </>
   );
 }
