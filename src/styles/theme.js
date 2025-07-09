@@ -4,12 +4,12 @@ import { createTheme } from "@mui/material/styles";
 let theme = createTheme({
   palette: {
     primary: {
-      main: "#4caf50", // насичений холодний зелений (основний колір)
+      main: "#5b8c5a", 
       contrastText: "#ffffff",
-      dark: "#388e3c", // темніший холодний зелений
+      dark: "#596157", 
     },
     success: {
-      main: "#81c784", // м'який ментолово-зелений
+      main: "#81c784", 
       contrastText: "#000000",
       dark: "#519657",
     },

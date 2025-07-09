@@ -36,24 +36,22 @@ export default function useBookEditor(book, editable) {
         if (!chapterNames.length) return;
 
         const allChapters = await Promise.all(
-          chapterNames.map((section) =>
-            fetch(
+          chapterNames.map(async (section) => {
+            const res = await fetch(
               `/api/content/chapters?book=${book}&section=${encodeURIComponent(
-                section
+                section.title
               )}`
-            )
-              .then((res) => res.json())
-              .then((data) => {
-                const content = data.content?.content || [];
-                if (content.length > 0 && content[0].type === "heading") {
-                  content[0].attrs = {
-                    ...content[0].attrs,
-                    id: section,
-                  };
-                }
-                return content;
-              })
-          )
+            );
+            const data = await res.json();
+            const content = data.content?.content || [];
+            if (content.length > 0 && content[0].type === "heading") {
+              content[0].attrs = {
+                ...content[0].attrs,
+                id: section,
+              };
+            }
+            return content;
+          })
         );
 
         const combinedContent = allChapters.flat();

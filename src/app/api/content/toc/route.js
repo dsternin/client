@@ -6,7 +6,6 @@ import { BookSchema, getBookChaptersWithTitles } from "../books/route";
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
-
 export async function GET() {
   try {
     await dbConnect();
@@ -15,18 +14,14 @@ export async function GET() {
     const result = [];
 
     for (const book of books) {
-      const chapterTitles = await getBookChaptersWithTitles(book);      
-      const chapters = book.chapters.map((id, index) => ({
-        section: id,
-        title: chapterTitles[index] || id,
-      }));     
+      const chapters = await getBookChaptersWithTitles(book);
       result.push({
         name: book.name,
         label: book.label,
         chapters,
       });
     }
-    
+
     return NextResponse.json(result);
   } catch (error) {
     console.error(error);

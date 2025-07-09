@@ -5,7 +5,9 @@ export default function useToc() {
   useEffect(() => {
     fetch("/api/content/toc")
       .then((res) => res.json())
-      .then((data) => setToc(data));
+      .then((data) => {
+        setToc(data);
+      });
   }, []);
   return toc;
 }

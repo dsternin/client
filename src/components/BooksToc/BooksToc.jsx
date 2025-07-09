@@ -50,33 +50,74 @@ export default function BooksToc() {
               </AccordionSummary>
               <AccordionDetails>
                 <List dense>
-                  {book.chapters.map((ch) => (
-                    <Link
-                      key={ch.section}
-                      href={{
-                        pathname: "/reader",
-                        query: {
-                          book: book.name,
-                          section: ch.title,
-                        },
-                      }}
-                      passHref
-                      style={{
-                        textDecoration: "none",
-                        color: "#000",
-                        display: "block",
-                      }}
-                    >
-                      <ListItem onClick={() => setOpen(false)}>
-                        <ListItemText
-                          primary={ch.title}
-                          primaryTypographyProps={{
-                            fontSize: "16px",
+                  {book.chapters.map((ch) =>
+                    ch.points?.length > 0 ? (
+                      <Accordion key={ch.section} sx={{ boxShadow: "none" }}>
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                          <Typography fontWeight={500}>{ch.title}</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ pl: 1 }}>
+                          <List dense>
+                            {ch.points.map((pt) => (
+                              <Link
+                                key={pt.title}
+                                href={{
+                                  pathname: "/reader",
+                                  query: {
+                                    book: book.name,
+                                    section: ch.title,
+                                    point: pt.title,
+                                  },
+                                }}
+                                passHref
+                                style={{
+                                  textDecoration: "none",
+                                  color: "#444",
+                                  display: "block",
+                                }}
+                              >
+                                <ListItem onClick={() => setOpen(false)}>
+                                  <ListItemText
+                                    primary={pt.title}
+                                    primaryTypographyProps={{
+                                      fontSize: "14px",
+                                    }}
+                                  />
+                                </ListItem>
+                              </Link>
+                            ))}
+                          </List>
+                        </AccordionDetails>
+                      </Accordion>
+                    ) : (
+                      <Accordion
+                        key={ch.section}
+                        sx={{ boxShadow: "none" }}
+                        expanded={false}
+                        onChange={() => {}}
+                      >
+                        <Link
+                          href={{
+                            pathname: "/reader",
+                            query: {
+                              book: book.name,
+                              section: ch.title,
+                            },
                           }}
-                        />
-                      </ListItem>
-                    </Link>
-                  ))}
+                          passHref
+                          style={{
+                            textDecoration: "none",
+                            color: "inherit",
+                            width: "100%",
+                          }}
+                        >
+                          <AccordionSummary>
+                            <Typography fontWeight={500}>{ch.title}</Typography>
+                          </AccordionSummary>
+                        </Link>
+                      </Accordion>
+                    )
+                  )}{" "}
                 </List>
               </AccordionDetails>
             </Accordion>
