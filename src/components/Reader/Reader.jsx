@@ -5,9 +5,9 @@ import { EditorContent } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import Search from "../Search";
 
-export default function Reader({ book = "intro", section = "" }) {
+export default function Reader({ book = "intro", section = "", point = "" }) {
   const { editor, isLoaded } = useBookEditor(book, false);
-  const [start, setSart] = useState();
+  const [start, setStart] = useState();
   const [end, setEnd] = useState();
   const [trigger, setTrigger] = useState(false);
 
@@ -28,19 +28,27 @@ export default function Reader({ book = "intro", section = "" }) {
 
   function highlight(start, end) {
     setEnd(end);
-    setSart(start);
+    setStart(start);
   }
 
   useEffect(() => {
-    if (!isLoaded || !section) return;
+    console.log(section);
+    console.log(point);
+    
+    
+    if (!isLoaded || (!section && !point)) return;
     triggerHighlight();
-    const el = document.getElementById(section);
+    const el = point
+      ? document.getElementById(point) || document.getElementById(section)
+      : document.getElementById(section);
+    console.log(el);
+    
     if (el) {
       setTimeout(() => {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 0);
     }
-  }, [editor, section, isLoaded]);
+  }, [editor, section, isLoaded, point]);
 
   return (
     <>

@@ -2,6 +2,37 @@ import { useEditor } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import getEditorExtensions from "@/lib/tiptapExtensions";
 
+function addIdsToHeadings(content) {
+  function extractText(node) {
+    if (!node) return "";
+    if (node.type === "text") return node.text || "";
+    if (Array.isArray(node.content)) {
+      return node.content.map(extractText).join("");
+    }
+    return "";
+  }
+
+  function traverse(node) {
+    if (!node || typeof node !== "object") return;
+
+    if (
+      node.type === "heading" &&
+      (node.attrs?.level === 1 || node.attrs?.level === 2)
+    ) {
+      const text = extractText(node);
+      const id = text;
+      node.attrs = { ...node.attrs, id };
+    }
+
+    if (Array.isArray(node.content)) {
+      node.content.forEach(traverse);
+    }
+  }
+
+  content.forEach(traverse);
+  return content;
+}
+
 export default function useBookEditor(book, editable) {
   const [isLoaded, setIsloaded] = useState(false);
   const editor = useEditor({
@@ -44,13 +75,7 @@ export default function useBookEditor(book, editable) {
             );
             const data = await res.json();
             const content = data.content?.content || [];
-            if (content.length > 0 && content[0].type === "heading") {
-              content[0].attrs = {
-                ...content[0].attrs,
-                id: section,
-              };
-            }
-            return content;
+            return addIdsToHeadings(content);
           })
         );
 
