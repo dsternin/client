@@ -32,17 +32,12 @@ export default function Reader({ book = "intro", section = "", point = "" }) {
   }
 
   useEffect(() => {
-    console.log(section);
-    console.log(point);
-    
-    
     if (!isLoaded || (!section && !point)) return;
     triggerHighlight();
     const el = point
       ? document.getElementById(point) || document.getElementById(section)
       : document.getElementById(section);
-    console.log(el);
-    
+
     if (el) {
       setTimeout(() => {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
