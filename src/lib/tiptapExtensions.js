@@ -32,9 +32,13 @@ export default function getEditorExtensions() {
     }),
     SearchHighlight,
     Link.configure({
-      openOnClick: true,
+      openOnClick: false,
       autolink: true,
       linkOnPaste: true,
+      HTMLAttributes: {
+        target: "_self",
+        rel: null,
+      },
     }),
   ];
 }

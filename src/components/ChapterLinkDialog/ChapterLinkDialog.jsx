@@ -12,24 +12,36 @@ import {
   Select,
   MenuItem,
 } from "@mui/material";
-import {  useState } from "react";
+import { useState } from "react";
 
 export default function ChapterLinkDialog({ open, onClose, onInsert }) {
   const toc = useToc();
   const [selectedBook, setSelectedBook] = useState("");
   const [selectedChapter, setSelectedChapter] = useState("");
+  const [selectedPoint, setSelectedPoint] = useState("");
 
   const handleInsert = () => {
-    if (selectedBook && selectedChapter) {
-      const url = `/reader?book=${selectedBook}&section=${selectedChapter}`;
+    if (selectedBook) {
+      let url = `/reader?book=${selectedBook}`;
+      if (selectedChapter) {
+        url += `&section=${selectedChapter}`;
+      }
+      if (selectedPoint) {
+        url += `&point=${selectedPoint}`;
+      }
       onInsert(url);
       onClose();
     }
   };
 
+  const currentBook = toc.find((b) => b.name === selectedBook);
+  const currentChapter = currentBook?.chapters.find(
+    (ch) => ch.title === selectedChapter
+  );
+
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogTitle>Добавить ссылку на главу книги</DialogTitle>
+      <DialogTitle>Добавить ссылку на раздел книги</DialogTitle>
       <DialogContent
         sx={{ minWidth: 300, display: "flex", flexDirection: "column", gap: 2 }}
       >
@@ -40,7 +52,8 @@ export default function ChapterLinkDialog({ open, onClose, onInsert }) {
             label="Книга"
             onChange={(e) => {
               setSelectedBook(e.target.value);
-              setSelectedChapter(""); // Сброс главы при смене книги
+              setSelectedChapter("");
+              setSelectedPoint("");
             }}
           >
             {toc.map((book) => (
@@ -57,19 +70,42 @@ export default function ChapterLinkDialog({ open, onClose, onInsert }) {
             <Select
               value={selectedChapter}
               label="Глава"
-              onChange={(e) => setSelectedChapter(e.target.value)}
+              onChange={(e) => {
+                setSelectedChapter(e.target.value);
+                setSelectedPoint("");
+              }}
             >
-              {toc
-                .find((b) => b.name === selectedBook)
-                ?.chapters.map((ch) => (
+              {currentBook?.chapters.map((ch) => {
+                return (
                   <MenuItem key={ch.section} value={ch.title}>
                     {ch.title}
                   </MenuItem>
-                ))}
+                );
+              })}
+            </Select>
+          </FormControl>
+        )}
+
+        {selectedChapter && currentChapter?.points?.length > 0 && (
+          <FormControl fullWidth>
+            <InputLabel>Раздел</InputLabel>
+            <Select
+              value={selectedPoint}
+              label="Раздел"
+              onChange={(e) => setSelectedPoint(e.target.value)}
+            >
+              {currentChapter.points.map((pt) => {
+                return (
+                  <MenuItem key={pt.title} value={pt.title}>
+                    {pt.title}
+                  </MenuItem>
+                );
+              })}
             </Select>
           </FormControl>
         )}
       </DialogContent>
+
       <DialogActions>
         <Button onClick={onClose}>Отмена</Button>
         <Button

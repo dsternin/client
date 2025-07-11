@@ -36,9 +36,13 @@ export async function GET(req) {
     return NextResponse.json({ error: "Книга не найдена" }, { status: 404 });
   }
 
-  const chapterNames = await getBookChaptersWithTitles(bookDoc);
+  const sections = await getBookChaptersWithTitles(bookDoc);
+
+
   const chapters = await Promise.all(
-    chapterNames.map((section) => Chapter.findOne({ book: bookName, section }))
+    sections.map((section) =>
+      Chapter.findOne({ book: bookName, section: section.title })
+    )
   );
 
   const matches = [];
