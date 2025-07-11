@@ -4,9 +4,11 @@ import useBookEditor from "@/hooks/useBookEditor";
 import { EditorContent } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import Search from "../Search";
+import { CircularProgress, Box } from "@mui/material";
 
 export default function Reader({ book = "intro", section = "", point = "" }) {
   const { editor, isLoaded } = useBookEditor(book, false);
+
   const [start, setStart] = useState();
   const [end, setEnd] = useState();
   const [trigger, setTrigger] = useState(false);
@@ -48,12 +50,25 @@ export default function Reader({ book = "intro", section = "", point = "" }) {
   return (
     <>
       {isLoaded ? (
-        <Search
-          highlight={highlight}
-          unsetSearchHighlight={editor.commands.unsetSearchHighlight}
-          editor={editor}
-        />
-      ) : null}
+        <>
+          <Search
+            highlight={highlight}
+            unsetSearchHighlight={editor.commands.unsetSearchHighlight}
+            editor={editor}
+          />
+        </>
+      ) : (
+        <Box
+          sx={{
+            height: "80vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <CircularProgress size={48} />
+        </Box>
+      )}
       <EditorContent editor={editor} />
     </>
   );
