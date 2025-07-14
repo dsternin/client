@@ -154,7 +154,7 @@ export default function Reader() {
           <CircularProgress size={48} />
         </Box>
       )}
-      {isLoaded ? (
+      {isLoaded && edit ? (
         <TipTapButtons
           editor={editor}
           save={() => {
