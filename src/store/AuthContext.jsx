@@ -1,5 +1,5 @@
-'use client';
-import { createContext, useContext, useEffect, useState } from 'react';
+"use client";
+import { createContext, useContext, useEffect, useState } from "react";
 
 const AuthContext = createContext();
 
@@ -12,7 +12,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (loaded) return;
 
-    fetch('/api/me')
+    fetch("/api/me")
       .then((res) => (res.ok ? res.json() : { user: null }))
       .then((data) => {
         setUser(data.user);

@@ -7,20 +7,26 @@ import theme from "@/styles/theme";
 import { ThemeProvider } from "@mui/material";
 import { AuthProvider } from "@/store/AuthContext";
 import AdminPanel from "@/components/AdminPanel";
-import BooksToc from "@/components/BooksToc";
+import { BookContextProvider } from "@/store/BookContext";
+import BookInfoPanel from "@/components/BookInfoPanel";
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="layout">
         <AuthProvider>
-          <ThemeProvider theme={theme}>
-            {/* <CssBaseline /> */}
-            <Header />
-            <AdminPanel />
-            <main className="content">{children}</main>
-            <Footer />
-          </ThemeProvider>
+          <BookContextProvider>
+            <ThemeProvider theme={theme}>
+              {/* <CssBaseline /> */}
+              <div className="stickyHeaderWrapper">
+                <Header />
+                <BookInfoPanel />
+              </div>
+              {/* <AdminPanel /> */}
+              <main className="content">{children}</main>
+              <Footer />
+            </ThemeProvider>
+          </BookContextProvider>
         </AuthProvider>
       </body>
     </html>

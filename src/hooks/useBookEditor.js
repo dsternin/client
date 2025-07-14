@@ -33,7 +33,7 @@ function addIdsToHeadings(content) {
   return content;
 }
 
-export default function useBookEditor(book, editable) {
+export default function useBookEditor(book, editable, setBookLabel = () => {}) {
   const [isLoaded, setIsloaded] = useState(false);
   const editor = useEditor({
     extensions: getEditorExtensions(),
@@ -64,6 +64,7 @@ export default function useBookEditor(book, editable) {
       .then(async (data) => {
         if (!data) return;
         const chapterNames = data.chapters || [];
+        setBookLabel(data.label);
         if (!chapterNames.length) return;
 
         const allChapters = await Promise.all(

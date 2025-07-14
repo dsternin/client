@@ -1,0 +1,17 @@
+.bookInfoPanel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+
+  /* sticky styles */
+  position: sticky;
+  top: 64px; /* якщо Header має 64px */
+  z-index: 999;
+}
+
+.infoBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

@@ -14,7 +14,7 @@ export default function Header() {
   const router = useRouter();
 
   return (
-    <header className={styles.header}>
+    <header>
       <div className={styles.container}>
         <MuiLink
           component={Link}

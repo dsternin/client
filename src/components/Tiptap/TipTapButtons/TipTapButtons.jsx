@@ -51,7 +51,7 @@ export default function TipTapButtons({ editor, save }) {
     <Box
       sx={{
         zIndex: 999,
-        top: "8rem",
+        top: "14rem",
         mb: 2,
         display: "flex",
         flexWrap: "wrap",
