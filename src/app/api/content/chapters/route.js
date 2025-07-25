@@ -40,9 +40,19 @@ export async function GET(req) {
 
 export async function PUT(req) {
   try {
-    await dbConnect();
+    const reader = req.body?.getReader();
+    const decoder = new TextDecoder();
+    let result = "";
 
-    const body = await req.json();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      result += decoder.decode(value, { stream: true });
+    }
+
+    result += decoder.decode();
+    const body = JSON.parse(result);
+
     const { book, section, content } = body;
 
     if (!book || !section || !content) {
@@ -55,9 +65,9 @@ export async function PUT(req) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    return NextResponse.json({ message: "Контент сохранен", id: updated._id });
-  } catch (error) {
-    console.error(error);
+    return NextResponse.json({ message:  "Контент сохранен", id: updated._id });
+  } catch (err) {
+    console.error(err);
     return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
   }
 }
