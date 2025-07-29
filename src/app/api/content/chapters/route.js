@@ -105,6 +105,8 @@ export async function loadChapter(book, section) {
   const now = Date.now();
 
   if (cached && now - cached.timestamp < ONE_DAY_MS) {
+    console.log(`Chapter from cache ${book}_${section}`);
+
     return cached.data;
   }
 
