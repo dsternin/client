@@ -144,6 +144,25 @@ export default function Reader() {
   }
 
   function goToMatch(match) {
+    if (!fullDoc || !editor) return;
+
+    if (pageBlockSize === -1) {
+      setCurrentPage(0);
+      editor.commands.setContent(fullDoc, false);
+
+      setTimeout(() => {
+        const relativePos = getRelativePositionInSlice(
+          fullDoc,
+          match.blockIndex,
+          match.childIndexPath,
+          match.charIndex
+        );
+        highlight(relativePos, relativePos + match.length);
+      }, 0);
+
+      return;
+    }
+
     const pageIndex = Math.floor(match.blockIndex / pageBlockSize);
     const sliceStart = pageIndex * pageBlockSize;
     const sliceEnd = sliceStart + pageBlockSize;
@@ -199,6 +218,16 @@ export default function Reader() {
         (block) => block.attrs?.id === id
       );
       if (index === -1) return;
+
+      if (pageBlockSize === -1) {
+        setCurrentPage(0);
+        editor.commands.setContent(fullDoc, false);
+
+        waitForElement(`#${CSS.escape(id)}`, 20).then((el) => {
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+        return;
+      }
 
       const pageIndex = Math.floor(index / pageBlockSize);
       const sliceStart = pageIndex * pageBlockSize;
