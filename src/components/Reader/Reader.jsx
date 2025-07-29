@@ -132,7 +132,7 @@ export default function Reader() {
   }
 
   function goToPage(page) {
-    if (!fullDoc || !editor) return;
+    if (!fullDoc || !editor || pageBlockSize === -1) return;
     const start = page * pageBlockSize;
     const end = pageBlockSize === -1 ? undefined : start + pageBlockSize;
     const sliced = {
@@ -348,7 +348,7 @@ function waitForElement(selector, maxTries = 20, delay = 100) {
       const el = document.querySelector(selector);
       if (el && el.offsetHeight > 0) return resolve(el);
       if (tries++ >= maxTries) return resolve(null);
-      setTimeout(check, delay); 
+      setTimeout(check, delay);
     }
     check();
   });
