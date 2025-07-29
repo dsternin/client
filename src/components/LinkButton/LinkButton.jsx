@@ -1,26 +1,23 @@
 "use client";
+import { Button } from "@mui/material";
 
-import { useEffect, useState } from "react";
-import Image from "next/image";
-
-export default function Home() {
-  const [text, setText] = useState("");
-  const [dedication, setDedication] = useState("");
-  useEffect(() => {
-    fetch("/api/intro")
-      .then((res) => res.json())
-      .then((data) => {
-        setText(data.message);
-        setDedication(data.dedication);
-      });
-  }, []);
+export default function LinkButton({ children, ...props }) {
   return (
-    <>
-      <div style={{ display: "flex", justifyContent: "center" }}>
-        <Image alt="sky" width={500} height={500 * 0.6} src="/oblako.jpg" />
-      </div>
-      {/* <p>"{dedication}"</p> */}
-      <div dangerouslySetInnerHTML={{ __html: text }} />
-    </>
+    <Button
+      variant="text"
+      {...props}
+      sx={{
+        backgroundColor: "transparent",
+        color: "#000",
+        textTransform: "none",
+        "&:hover": {
+          backgroundColor: "transparent",
+        },
+        fontFamily: "Cormorant Garamond, serif",
+        fontSize: "2.25rem",
+      }}
+    >
+      {children}
+    </Button>
   );
 }
