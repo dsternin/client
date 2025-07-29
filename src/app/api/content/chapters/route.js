@@ -101,6 +101,7 @@ export async function saveChapter(book, section, content) {
 }
 export async function loadChapter(book, section) {
   const key = `${book}_${section}`;
+  console.log(`start ${key}`);
   const cached = chapterCache.get(key);
   const now = Date.now();
 
@@ -129,7 +130,7 @@ export async function loadChapter(book, section) {
           const data = JSON.parse(buffer.toString("utf-8"));
 
           chapterCache.set(key, { data, timestamp: now });
-
+          console.log(`end ${key}`);
           resolve(data);
         } catch (e) {
           console.error("❌ JSON parsing error", e);
