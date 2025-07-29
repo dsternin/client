@@ -95,7 +95,7 @@ export async function PUT(req) {
       { chapters },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
-
+    chapterCache.delete(book);
     return NextResponse.json({ ok: true, id: updated._id });
   } catch (error) {
     console.error(error);

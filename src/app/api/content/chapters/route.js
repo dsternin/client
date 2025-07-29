@@ -4,6 +4,9 @@ import mongoose from "mongoose";
 import { GridFSBucket } from "mongodb";
 import { Readable } from "stream";
 
+const chapterCache = new Map();
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 export const ChapterSchema = new mongoose.Schema(
   {
     book: { type: String, required: true },
@@ -78,6 +81,7 @@ export async function PUT(req) {
 }
 
 export async function saveChapter(book, section, content) {
+  chapterCache.delete(`${book}_${section}`);
   const conn = await dbConnect();
   const db = conn.connection.db;
 
@@ -95,17 +99,21 @@ export async function saveChapter(book, section, content) {
       .on("finish", () => resolve(section));
   });
 }
-
 export async function loadChapter(book, section) {
+  const key = `${book}_${section}`;
+  const cached = chapterCache.get(key);
+  const now = Date.now();
+
+  if (cached && now - cached.timestamp < ONE_DAY_MS) {
+    return cached.data;
+  }
+
   const conn = await dbConnect();
   const db = conn.connection.db;
-
   const bucket = new GridFSBucket(db);
   const filename = `${book}_${section}`;
 
   const downloadStream = bucket.openDownloadStreamByName(filename);
-  // const downloadStream = bucket.openDownloadStream(section);
-
   const chunks = [];
 
   return new Promise((resolve, reject) => {
@@ -114,9 +122,13 @@ export async function loadChapter(book, section) {
         chunks.push(chunk);
       })
       .on("end", () => {
-        const buffer = Buffer.concat(chunks);
         try {
-          resolve(JSON.parse(buffer.toString("utf-8")));
+          const buffer = Buffer.concat(chunks);
+          const data = JSON.parse(buffer.toString("utf-8"));
+
+          chapterCache.set(key, { data, timestamp: now });
+
+          resolve(data);
         } catch (e) {
           console.error("❌ JSON parsing error", e);
           reject(e);
