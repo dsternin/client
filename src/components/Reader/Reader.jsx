@@ -341,14 +341,14 @@ function getRelativePositionInSlice(
   return pos + charIndex;
 }
 
-function waitForElement(selector, maxTries = 10) {
+function waitForElement(selector, maxTries = 20, delay = 100) {
   return new Promise((resolve) => {
     let tries = 0;
     function check() {
       const el = document.querySelector(selector);
-      if (el) return resolve(el);
+      if (el && el.offsetHeight > 0) return resolve(el);
       if (tries++ >= maxTries) return resolve(null);
-      requestAnimationFrame(check);
+      setTimeout(check, delay); 
     }
     check();
   });
