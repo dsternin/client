@@ -16,9 +16,6 @@ export const BookSchema = new mongoose.Schema(
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
-const Chapter =
-  mongoose.models.Chapter || mongoose.model("Chapter", ChapterSchema);
-
 export async function getBookChaptersWithTitles(bookDoc) {
   const chapterMap = new Map();
 

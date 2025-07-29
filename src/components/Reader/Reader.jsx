@@ -12,14 +12,7 @@ import useNearestHeadings from "@/hooks/useNearestHeadings";
 import { useSearchParams } from "next/navigation";
 
 export default function Reader() {
-  const {
-    book = "intro",
-    section = "",
-    point = "",
-    setBookLabel,
-    edit,
-    setEdit,
-  } = useBookContext();
+  const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
   const { editor, isLoaded } = useBookEditor(book, edit, setBookLabel);
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
@@ -185,7 +178,7 @@ export default function Reader() {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 0);
     }
-  }, [start, end, trigger, isLoaded]);
+  }, [start, end, trigger]);
 
   useEffect(() => {
     if (!isLoaded || !editor) return;
