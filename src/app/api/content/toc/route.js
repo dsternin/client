@@ -14,7 +14,11 @@ export async function GET() {
     const result = [];
 
     for (const book of books) {
+      console.log("start chapters");
+
       const chapters = await getBookChaptersWithTitles(book);
+      console.log("end chapters");
+
       result.push({
         name: book.name,
         label: book.label,
