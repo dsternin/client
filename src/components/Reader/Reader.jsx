@@ -208,18 +208,14 @@ export default function Reader() {
         content: fullDoc.content.slice(sliceStart, sliceEnd),
       };
 
-      setTimeout(() => {
-        setCurrentPage(pageIndex);
-        editor.commands.setContent(sliced, false);
+      setCurrentPage(pageIndex);
+      editor.commands.setContent(sliced, false);
 
-        setTimeout(() => {
-          const el = document.getElementById(id);
-          if (el) {
-            el.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-        }, 100);
-      }, 0);
+      waitForElement(`#${CSS.escape(id)}`, 10).then((el) => {
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     }
+
     if (!isLoaded || (!initialSection && !initialPoint)) return;
     triggerHighlight();
     const targetId = initialPoint || initialSection;
@@ -343,4 +339,17 @@ function getRelativePositionInSlice(
   }
 
   return pos + charIndex;
+}
+
+function waitForElement(selector, maxTries = 10) {
+  return new Promise((resolve) => {
+    let tries = 0;
+    function check() {
+      const el = document.querySelector(selector);
+      if (el) return resolve(el);
+      if (tries++ >= maxTries) return resolve(null);
+      requestAnimationFrame(check);
+    }
+    check();
+  });
 }

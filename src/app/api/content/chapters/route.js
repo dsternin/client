@@ -33,9 +33,6 @@ export async function GET(req) {
         { status: 400 }
       );
     }
-    // const entry = await Chapter.findOne({ book, section });
-    // if (!entry) return NextResponse.json({ content: null });
-    // return NextResponse.json({ content: entry.content });
     const content = await loadChapter(book, section);
     return NextResponse.json({ content });
   } catch (error) {
@@ -96,7 +93,13 @@ export async function saveChapter(book, section, content) {
     stream
       .pipe(uploadStream)
       .on("error", reject)
-      .on("finish", () => resolve(section));
+      .on("finish", () => {
+        resolve(section);
+        // chapterCache.set(`${book}_${section}`, {
+        //   data: section,
+        //   timestamp: Date.now(),
+        // });
+      });
   });
 }
 export async function loadChapter(book, section) {
