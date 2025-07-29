@@ -4,9 +4,12 @@ import useBookEditor from "@/hooks/useBookEditor";
 import { EditorContent } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import Search from "../Search";
-import { CircularProgress, Box } from "@mui/material";
+import { CircularProgress, Box, Button, Typography } from "@mui/material";
 import { useBookContext } from "@/store/BookContext";
 import TipTapButtons from "../Tiptap/TipTapButtons";
+import MenuButton from "../MenuButtons";
+import useNearestHeadings from "@/hooks/useNearestHeadings";
+import { useSearchParams } from "next/navigation";
 
 export default function Reader() {
   const {
@@ -18,6 +21,35 @@ export default function Reader() {
     setEdit,
   } = useBookContext();
   const { editor, isLoaded } = useBookEditor(book, edit, setBookLabel);
+  const { setSection, setPoint } = useBookContext();
+  const [fullDoc, setFullDoc] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageBlockSize, setPageBlockSize] = useState(50);
+  function updateBlockSize(value) {
+    const newSize = parseInt(value);
+    setPageBlockSize(newSize);
+    setCurrentPage(0);
+    if (fullDoc && editor) {
+      const sliced = {
+        ...fullDoc,
+        content:
+          newSize === -1 ? fullDoc.content : fullDoc.content.slice(0, newSize),
+      };
+      editor.commands.setContent(sliced, false);
+    }
+  }
+  const pageLabel = pageBlockSize === -1 ? "Весь текст" : `${pageBlockSize}`;
+
+  const [start, setStart] = useState();
+  const [end, setEnd] = useState();
+  const [trigger, setTrigger] = useState(false);
+
+  const searchParams = useSearchParams();
+
+  const initialSection = searchParams.get("section");
+  const initialPoint = searchParams.get("point");
+
+  useNearestHeadings(setSection, setPoint);
 
   useEffect(() => {
     if (editor) {
@@ -25,20 +57,28 @@ export default function Reader() {
     }
   }, [edit]);
 
-  const [start, setStart] = useState();
-  const [end, setEnd] = useState();
-  const [trigger, setTrigger] = useState(false);
-
   function triggerHighlight() {
     setTrigger((prev) => !prev);
   }
 
   async function save() {
-    if (!editor || !book) return;
+    if (!editor || !book || !fullDoc) return;
 
-    const fullContent = editor.getJSON();
+    const editedPageContent = editor.getJSON().content;
+    const pageStart = currentPage * pageBlockSize;
+    const pageEnd = pageStart + pageBlockSize;
+
+    const updatedFullDoc = {
+      ...fullDoc,
+      content: [
+        ...fullDoc.content.slice(0, pageStart),
+        ...editedPageContent,
+        ...fullDoc.content.slice(pageEnd),
+      ],
+    };
+
+    const fullContent = updatedFullDoc;
     const chapters = [];
-
     let currentChapter = null;
 
     for (const block of fullContent.content) {
@@ -46,18 +86,15 @@ export default function Reader() {
         if (currentChapter) {
           const res = await fetch("/api/content/chapters", {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               book,
               section: currentChapter.slug,
               content: { type: "doc", content: currentChapter.content },
             }),
           });
-
           const data = await res.json();
-          if (data.id) chapters.push(data.id);
+          if (data.section) chapters.push(data.section);
         }
         currentChapter = {
           slug: block.content?.[0]?.text || "glava",
@@ -67,39 +104,76 @@ export default function Reader() {
         currentChapter.content.push(block);
       }
     }
+
     if (currentChapter) {
       const res = await fetch("/api/content/chapters", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           book,
           section: currentChapter.slug,
           content: { type: "doc", content: currentChapter.content },
         }),
       });
-
       const data = await res.json();
-      if (data.id) chapters.push(data.id);
+      if (data.section) chapters.push(data.section);
     }
 
     const update = await fetch("/api/content/books", {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        book,
-        chapters,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ book, chapters }),
     });
 
     if (!update.ok) {
       alert("Ошибка при сохранении книги");
     } else {
+      setFullDoc(updatedFullDoc);
       alert("Сохранено успешно!");
     }
+  }
+
+  function highlight(start, end) {
+    setEnd(end);
+    setStart(start);
+  }
+
+  function goToPage(page) {
+    if (!fullDoc || !editor) return;
+    const start = page * pageBlockSize;
+    const end = pageBlockSize === -1 ? undefined : start + pageBlockSize;
+    const sliced = {
+      ...fullDoc,
+      content: fullDoc.content.slice(start, end),
+    };
+    setCurrentPage(page);
+    editor.commands.setContent(sliced, false);
+  }
+
+  function goToMatch(match) {
+    const pageIndex = Math.floor(match.blockIndex / pageBlockSize);
+    const sliceStart = pageIndex * pageBlockSize;
+    const sliceEnd = sliceStart + pageBlockSize;
+    const sliced = {
+      ...fullDoc,
+      content: fullDoc.content.slice(sliceStart, sliceEnd),
+    };
+
+    setTimeout(() => {
+      setCurrentPage(pageIndex);
+      editor.commands.setContent(sliced, false);
+
+      setTimeout(() => {
+        const localBlockIndex = match.blockIndex % pageBlockSize;
+        const relativePos = getRelativePositionInSlice(
+          sliced,
+          localBlockIndex,
+          match.childIndexPath,
+          match.charIndex
+        );
+        highlight(relativePos, relativePos + match.length);
+      }, 0);
+    }, 0);
   }
 
   useEffect(() => {
@@ -113,35 +187,68 @@ export default function Reader() {
     }
   }, [start, end, trigger]);
 
-  function highlight(start, end) {
-    setEnd(end);
-    setStart(start);
-  }
+  useEffect(() => {
+    if (!isLoaded || !editor) return;
+    const json = editor.getJSON();
+    setFullDoc(json);
+
+    const slice = {
+      ...json,
+      content: json.content.slice(0, pageBlockSize),
+    };
+    editor.commands.setContent(slice, false);
+  }, [editor, isLoaded]);
 
   useEffect(() => {
-    if (!isLoaded || (!section && !point)) return;
-    triggerHighlight();
-    const el = point
-      ? document.getElementById(point) || document.getElementById(section)
-      : document.getElementById(section);
+    function goToSection(id) {
+      if (!fullDoc || !Array.isArray(fullDoc.content)) return;
+      const index = fullDoc.content.findIndex(
+        (block) => block.attrs?.id === id
+      );
+      if (index === -1) return;
 
-    if (el) {
+      const pageIndex = Math.floor(index / pageBlockSize);
+      const sliceStart = pageIndex * pageBlockSize;
+      const sliceEnd = sliceStart + pageBlockSize;
+      const sliced = {
+        ...fullDoc,
+        content: fullDoc.content.slice(sliceStart, sliceEnd),
+      };
+
       setTimeout(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setCurrentPage(pageIndex);
+        editor.commands.setContent(sliced, false);
+
+        setTimeout(() => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 0);
       }, 0);
     }
-  }, [editor, section, isLoaded, point]);
+    if (!isLoaded || (!initialSection && !initialPoint)) return;
+    triggerHighlight();
+    const targetId = initialPoint || initialSection;
+    goToSection(targetId);
+  }, [editor, isLoaded, initialPoint, initialSection]);
 
+  const totalPages = fullDoc
+    ? pageBlockSize === -1
+      ? 1
+      : Math.ceil(fullDoc.content.length / pageBlockSize)
+    : 0;
   return (
     <>
       {isLoaded ? (
-        <>
+        !edit && (
           <Search
             highlight={highlight}
-            unsetSearchHighlight={editor.commands.unsetSearchHighlight}
             editor={editor}
+            fullDoc={fullDoc}
+            goToMatch={goToMatch}
           />
-        </>
+        )
       ) : (
         <Box
           sx={{
@@ -165,6 +272,82 @@ export default function Reader() {
       ) : null}
 
       <EditorContent editor={editor} />
+
+      {isLoaded && fullDoc && !edit && (
+        <>
+          <Box
+            sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
+          >
+            <Button
+              variant="contained"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 0}
+            >
+              Назад
+            </Button>
+            <Typography variant="body1" sx={{ alignSelf: "center" }}>
+              Страница {currentPage + 1} из {totalPages}
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage + 1 >= totalPages}
+            >
+              Вперёд
+            </Button>
+          </Box>
+
+          <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
+            <MenuButton
+              label={`Абзацев на страницу: ${pageLabel}`}
+              items={{
+                50: () => updateBlockSize(50),
+                100: () => updateBlockSize(100),
+                200: () => updateBlockSize(200),
+                500: () => updateBlockSize(500),
+                "-1": () => updateBlockSize(-1),
+              }}
+              renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
+            />
+          </Box>
+        </>
+      )}
     </>
   );
+}
+
+function getNodeLength(node) {
+  if (!node) return 0;
+  if (node.text) return node.text.length;
+  if (node.type === "customImage" || node.type === "hardBreak") return 1;
+  if (node.content) {
+    return node.content.reduce((sum, child) => sum + getNodeLength(child), 2);
+  }
+  return 2;
+}
+
+function getRelativePositionInSlice(
+  slice,
+  blockIndex,
+  childIndexPath,
+  charIndex
+) {
+  let pos = 1;
+
+  for (let i = 0; i < blockIndex; i++) {
+    const block = slice.content[i];
+    pos += getNodeLength(block);
+  }
+
+  let currentNode = slice.content[blockIndex];
+  for (let idx of childIndexPath) {
+    if (!currentNode || !currentNode.content || !currentNode.content[idx])
+      break;
+    for (let i = 0; i < idx; i++) {
+      pos += getNodeLength(currentNode.content[i]);
+    }
+    currentNode = currentNode.content[idx];
+  }
+
+  return pos + charIndex;
 }

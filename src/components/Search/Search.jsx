@@ -13,7 +13,7 @@ import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close";
 
-export default function Search({ highlight, editor }) {
+export default function Search({ editor, fullDoc, goToMatch }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -27,34 +27,45 @@ export default function Search({ highlight, editor }) {
   const [open, setOpen] = useState(false);
 
   const book = searchParams.get("book");
-  const section = searchParams.get("section");
   const query = searchParams.get("query") || "";
 
   useEffect(() => {
     setQueryInput(query);
-    if (query.trim()) {
+    if (query.trim() && fullDoc?.content?.length > 0) {
       handleSearch(query);
       setOpen(true);
     } else {
       setMatches(null);
       setCount(0);
     }
-  }, [query, book]);
+  }, [query, book, fullDoc]);
 
   useEffect(() => {
-    if (!count || !matches?.[cursor] || !editor) return;
-
-    const { blockIndex, childIndexPath, charIndex, length } = matches[cursor];
-    const doc = editor.getJSON();
-
-    const absolutePos = getAbsolutePosition(
-      doc,
-      blockIndex,
-      childIndexPath,
-      charIndex
-    );
-    highlight(absolutePos, absolutePos + length);
+    if (!count || !matches?.[cursor] || !editor || !goToMatch) return;
+    goToMatch(matches[cursor]);
   }, [cursor, matches, count, editor]);
+
+  const searchInDocument = (doc, query) => {
+    const matches = [];
+    doc.content.forEach((block, blockIndex) => {
+      if (!block.content) return;
+      block.content.forEach((child, childIndex) => {
+        if (child.text) {
+          const regex = new RegExp(query, "gi");
+          let match;
+          while ((match = regex.exec(child.text))) {
+            matches.push({
+              blockIndex,
+              childIndexPath: [childIndex],
+              charIndex: match.index,
+              length: match[0].length,
+            });
+          }
+        }
+      });
+    });
+    return matches;
+  };
 
   const handleSearch = async (searchQuery) => {
     if (!searchQuery.trim()) return;
@@ -62,23 +73,22 @@ export default function Search({ highlight, editor }) {
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/search?book=${book}&query=${searchQuery}`
-      );
-      const { matches, count } = await response.json();
+      if (!fullDoc) throw new Error("Документ не загружен");
+      const matches = searchInDocument(fullDoc, searchQuery);
+      const count = matches.length;
+
       if (count) {
-        const localIndex = matches.findIndex((m) => m.section === section);
-        setCursor(localIndex === -1 ? 0 : localIndex);
+        setCursor(0);
         setMatches(matches);
         setCount(count);
       } else {
         setMatches(null);
         setCount(0);
-        setError("В этой книге результатов не найдено.");
+        setError("Ничего не найдено в текущей книге.");
       }
     } catch (err) {
       console.error(err);
-      setError("Произошла ошибка при поиске.");
+      setError("Ошибка при поиске.");
     } finally {
       setLoading(false);
     }
@@ -97,10 +107,8 @@ export default function Search({ highlight, editor }) {
   async function searchInNextBook() {
     const toc = await (await fetch("/api/content/toc")).json();
     const currentBook = searchParams.get("book");
-
     const currentIndex = toc.findIndex((b) => b.name === currentBook);
     const nextBook = toc[(currentIndex + 1) % toc.length];
-
     if (nextBook?.chapters?.length) {
       const params = new URLSearchParams(searchParams);
       params.set("book", nextBook.name);
@@ -113,10 +121,8 @@ export default function Search({ highlight, editor }) {
   async function searchInPrevBook() {
     const toc = await (await fetch("/api/content/toc")).json();
     const currentBook = searchParams.get("book");
-
     const currentIndex = toc.findIndex((b) => b.name === currentBook);
     const prevBook = toc[(currentIndex - 1 + toc.length) % toc.length];
-
     if (prevBook?.chapters?.length) {
       const params = new URLSearchParams(searchParams);
       params.set("book", prevBook.name);
@@ -200,42 +206,37 @@ export default function Search({ highlight, editor }) {
             <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
               {cursor > 0 ? (
                 <Button
-                 sx={{ height: 48 }}
+                  sx={{ height: 48 }}
                   variant="outlined"
                   onClick={prev}
-                  disabled={loading}
                   fullWidth
                 >
                   Назад
                 </Button>
               ) : (
                 <Button
-                 sx={{ height: 48 }}
+                  sx={{ height: 48 }}
                   variant="outlined"
                   onClick={searchInPrevBook}
-                  disabled={loading}
                   fullWidth
                 >
                   Искать в предыдущей книге
                 </Button>
               )}
-
               {cursor < count - 1 ? (
                 <Button
-                 sx={{ height: 48 }}
+                  sx={{ height: 48 }}
                   variant="outlined"
                   onClick={next}
-                  disabled={loading}
                   fullWidth
                 >
                   Далее
                 </Button>
               ) : (
                 <Button
-                 sx={{ height: 48 }}
+                  sx={{ height: 48 }}
                   variant="outlined"
                   onClick={searchInNextBook}
-                  disabled={loading}
                   fullWidth
                 >
                   Искать в следующей книге
@@ -248,7 +249,6 @@ export default function Search({ highlight, editor }) {
                 sx={{ height: 48 }}
                 variant="outlined"
                 onClick={searchInPrevBook}
-                disabled={loading}
                 fullWidth
               >
                 Искать в предыдущей книге
@@ -257,7 +257,6 @@ export default function Search({ highlight, editor }) {
                 sx={{ height: 48 }}
                 variant="outlined"
                 onClick={searchInNextBook}
-                disabled={loading}
                 fullWidth
               >
                 Искать в следующей книге
@@ -274,48 +273,4 @@ export default function Search({ highlight, editor }) {
       )}
     </>
   );
-}
-
-export function getAbsolutePosition(
-  doc,
-  blockIndex,
-  childIndexPath,
-  charIndex
-) {
-  let pos = 1;
-
-  for (let i = 0; i < blockIndex; i++) {
-    const block = doc.content[i];
-    pos += getNodeLength(block);
-  }
-
-  let currentNode = doc.content[blockIndex];
-  for (let idx of childIndexPath) {
-    if (!currentNode || !currentNode.content || !currentNode.content[idx])
-      break;
-    if (
-      currentNode.type === "bulletList" ||
-      currentNode.type === "listItem" ||
-      currentNode.type === "textBox"
-    ) {
-      pos += 1;
-    }
-    for (let i = 0; i < idx; i++) {
-      pos += getNodeLength(currentNode.content[i]);
-    }
-    currentNode = currentNode.content[idx];
-  }
-
-  return pos + charIndex;
-}
-
-export function getNodeLength(node) {
-  if (!node) return 0;
-  if (node.text) return node.text.length;
-
-  if (node.type === "customImage" || node.type === "hardBreak") return 1;
-  if (node.content) {
-    return node.content.reduce((sum, child) => sum + getNodeLength(child), 2);
-  }
-  return 2;
 }

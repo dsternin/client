@@ -2,7 +2,6 @@
 
 import styles from "./BookInfoPanel.module.css";
 import { Typography, Button, Box } from "@mui/material";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/store/AuthContext";
 import { useBookContext } from "@/store/BookContext";
 
@@ -11,7 +10,6 @@ export default function BookInfoPanel() {
   const { user } = useAuth();
 
   const editButtonIsVisible = user?.role === "admin" && !edit;
-  const router = useRouter();
 
   const handleEdit = () => {
     setEdit(true);

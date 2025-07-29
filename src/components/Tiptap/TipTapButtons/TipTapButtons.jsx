@@ -59,27 +59,14 @@ export default function TipTapButtons({ editor, save }) {
         position: "sticky",
       }}
     >
-      <Button
-        color="primary"
-        variant="contained"
-        onClick={() => editor?.chain().focus().toggleBold().run()}
-      >
-        Жирный
-      </Button>
-      <Button
-        color="primary"
-        variant="contained"
-        onClick={() => editor?.chain().focus().toggleItalic().run()}
-      >
-        Курсив
-      </Button>
-      <Button
-        color="primary"
-        variant="contained"
-        onClick={() => editor?.chain().focus().toggleUnderline().run()}
-      >
-        Подчёркнутый
-      </Button>
+      <MenuButton
+        label="Стиль текста"
+        items={{
+          Жирный: () => editor?.chain().focus().toggleBold().run(),
+          Курсив: () => editor?.chain().focus().toggleItalic().run(),
+          Подчёркнутый: () => editor?.chain().focus().toggleUnderline().run(),
+        }}
+      />
       <MenuButton
         label="Заголовок"
         items={{
@@ -97,7 +84,7 @@ export default function TipTapButtons({ editor, save }) {
       <Button color="primary" variant="contained" onClick={insertImage}>
         Вставить картинку
       </Button>
-      <Button
+      {/* <Button
         variant="contained"
         color="primary"
         onClick={() => {
@@ -111,7 +98,7 @@ export default function TipTapButtons({ editor, save }) {
         }}
       >
         Без отступа
-      </Button>
+      </Button> */}
 
       <MenuButton
         label="Выравнивание"

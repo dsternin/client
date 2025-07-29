@@ -1,27 +1,22 @@
-// theme.js
 import { createTheme } from "@mui/material/styles";
 
 let theme = createTheme({
   palette: {
     primary: {
-      main: "#5b8c5a", 
+      main: "#5b8c5a",
       contrastText: "#ffffff",
-      dark: "#596157", 
+      dark: "#596157",
     },
     success: {
-      main: "#81c784", 
+      main: "#81c784",
       contrastText: "#000000",
       dark: "#519657",
     },
-    typography: {
-      fontSize: 26,
-      body1: {
-        fontSize: "1.5rem",
-      },
-      button: {
-        textTransform: "none",
-        fontSize: "2.25rem",
-      },
+  },
+  typography: {
+    button: {
+      textTransform: "none",
+      fontSize: "0.8rem",
     },
   },
 });
@@ -82,19 +77,6 @@ theme = createTheme(theme, {
           backgroundColor: "transparent",
           padding: theme.spacing(2),
         },
-      },
-    },
-    typography: {
-      fontSize: 26,
-      body1: {
-        fontSize: "1.5rem",
-      },
-      body2: {
-        fontSize: "24px", // додаємо body2
-      },
-      button: {
-        textTransform: "none",
-        fontSize: "2.25rem",
       },
     },
   },
