@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
-import { MongoClient, GridFSBucket, ObjectId } from "mongodb";
 
-import { ChapterSchema, loadChapter } from "../chapters/route";
+import { loadChapter } from "../chapters/route";
 
 export const BookSchema = new mongoose.Schema(
   {
@@ -16,7 +15,17 @@ export const BookSchema = new mongoose.Schema(
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
+const chapterCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 хвилин
+
 export async function getBookChaptersWithTitles(bookDoc) {
+  const cacheEntry = chapterCache.get(bookDoc.name);
+  const now = Date.now();
+  if (cacheEntry && now - cacheEntry.timestamp < CACHE_TTL_MS) {
+    console.log("from cache");
+
+    return cacheEntry.data;
+  }
   const chapterMap = new Map();
 
   for (const id of bookDoc.chapters) {
@@ -34,10 +43,14 @@ export async function getBookChaptersWithTitles(bookDoc) {
       chapterMap.set(id, { section: id, title: id, points: [] });
     }
   }
-
-  return bookDoc.chapters.map(
+  const result = bookDoc.chapters.map(
     (id) => chapterMap.get(id) || { section: id, title: id, points: [] }
   );
+  chapterCache.set(bookDoc.name, {
+    timestamp: now,
+    data: result,
+  });
+  return result;
 }
 
 export async function GET(req) {
