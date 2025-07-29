@@ -24,7 +24,7 @@ export default function Reader() {
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
-  const [pageBlockSize, setPageBlockSize] = useState(50);
+  const [pageBlockSize, setPageBlockSize] = useState(-1);
   function updateBlockSize(value) {
     const newSize = parseInt(value);
     setPageBlockSize(newSize);
@@ -185,7 +185,7 @@ export default function Reader() {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 0);
     }
-  }, [start, end, trigger]);
+  }, [start, end, trigger, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded || !editor) return;

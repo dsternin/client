@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
-import { MongoClient, GridFSBucket, ObjectId } from "mongodb";
+import { GridFSBucket } from "mongodb";
 import { Readable } from "stream";
 
 export const ChapterSchema = new mongoose.Schema(
