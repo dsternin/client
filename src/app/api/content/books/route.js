@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
-import { ChapterSchema } from "../chapters/route";
+import { MongoClient, GridFSBucket, ObjectId } from "mongodb";
+
+import { ChapterSchema, loadChapter } from "../chapters/route";
 
 export const BookSchema = new mongoose.Schema(
   {
@@ -18,29 +20,26 @@ const Chapter =
   mongoose.models.Chapter || mongoose.model("Chapter", ChapterSchema);
 
 export async function getBookChaptersWithTitles(bookDoc) {
-  const chapters = await Chapter.find({
-    _id: { $in: bookDoc.chapters },
-  }).select("section content");
-
   const chapterMap = new Map();
 
-  for (const ch of chapters) {
-    const id = ch._id.toString();
-    const section = ch.section;
+  for (const id of bookDoc.chapters) {
+    try {
+      const content = await loadChapter(bookDoc.name, id);
+      const points = extractH2FromTipTap(content);
 
-    const content = ch.content || {};
-
-    const points = extractH2FromTipTap(content);
-
-    chapterMap.set(id, {
-      section: id,
-      title: section,
-      points,
-    });
+      chapterMap.set(id, {
+        section: id,
+        title: id,
+        points,
+      });
+    } catch (err) {
+      console.warn(`⚠️ Не вдалося завантажити розділ ${id}:`, err);
+      chapterMap.set(id, { section: id, title: id, points: [] });
+    }
   }
 
   return bookDoc.chapters.map(
-    (id) => chapterMap.get(id) || { title: "", points: [] }
+    (id) => chapterMap.get(id) || { section: id, title: id, points: [] }
   );
 }
 

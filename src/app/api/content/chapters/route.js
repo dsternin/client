@@ -30,11 +30,11 @@ export async function GET(req) {
         { status: 400 }
       );
     }
-    const entry = await Chapter.findOne({ book, section });
-    if (!entry) return NextResponse.json({ content: null });
-    return NextResponse.json({ content: entry.content });
-    // const content = await loadChapter(book, section);
-    // return NextResponse.json({ content });
+    // const entry = await Chapter.findOne({ book, section });
+    // if (!entry) return NextResponse.json({ content: null });
+    // return NextResponse.json({ content: entry.content });
+    const content = await loadChapter(book, section);
+    return NextResponse.json({ content });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
