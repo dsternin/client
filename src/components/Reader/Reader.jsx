@@ -304,7 +304,7 @@ export default function Reader() {
 
       <EditorContent editor={editor} />
 
-      {isLoaded && fullDoc  && !edit && (
+      {isLoaded && fullDoc && false && !edit && (
         <>
           <Box
             sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
