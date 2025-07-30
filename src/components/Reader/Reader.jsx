@@ -291,45 +291,48 @@ export default function Reader() {
 
       <EditorContent editor={editor} />
 
-      {isLoaded && fullDoc && !edit && (
-        <>
-          <Box
-            sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
-          >
-            <Button
-              variant="contained"
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage === 0}
+      {isLoaded &&
+        fullDoc &&
+        !edit &&
+        false(
+          <>
+            <Box
+              sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
             >
-              Назад
-            </Button>
-            <Typography variant="body1" sx={{ alignSelf: "center" }}>
-              Страница {currentPage + 1} из {totalPages}
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage + 1 >= totalPages}
-            >
-              Вперёд
-            </Button>
-          </Box>
+              <Button
+                variant="contained"
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 0}
+              >
+                Назад
+              </Button>
+              <Typography variant="body1" sx={{ alignSelf: "center" }}>
+                Страница {currentPage + 1} из {totalPages}
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage + 1 >= totalPages}
+              >
+                Вперёд
+              </Button>
+            </Box>
 
-          <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
-            <MenuButton
-              label={`Абзацев на страницу: ${pageLabel}`}
-              items={{
-                50: () => updateBlockSize(50),
-                100: () => updateBlockSize(100),
-                200: () => updateBlockSize(200),
-                500: () => updateBlockSize(500),
-                "-1": () => updateBlockSize(-1),
-              }}
-              renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
-            />
-          </Box>
-        </>
-      )}
+            <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
+              <MenuButton
+                label={`Абзацев на страницу: ${pageLabel}`}
+                items={{
+                  50: () => updateBlockSize(50),
+                  100: () => updateBlockSize(100),
+                  200: () => updateBlockSize(200),
+                  500: () => updateBlockSize(500),
+                  "-1": () => updateBlockSize(-1),
+                }}
+                renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
+              />
+            </Box>
+          </>
+        )}
     </>
   );
 }
@@ -370,15 +373,27 @@ function getRelativePositionInSlice(
   return pos + charIndex;
 }
 
-function waitForElement(selector, maxTries = 20, delay = 100) {
+function waitForElement(selector, timeout = 3000) {
   return new Promise((resolve) => {
-    let tries = 0;
-    function check() {
+    const el = document.querySelector(selector);
+    if (el) return resolve(el);
+
+    const observer = new MutationObserver(() => {
       const el = document.querySelector(selector);
-      if (el && el.offsetHeight > 0) return resolve(el);
-      if (tries++ >= maxTries) return resolve(null);
-      setTimeout(check, delay);
-    }
-    check();
+      if (el) {
+        observer.disconnect();
+        resolve(el);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, timeout);
   });
 }
