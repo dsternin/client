@@ -291,48 +291,45 @@ export default function Reader() {
 
       <EditorContent editor={editor} />
 
-      {isLoaded &&
-        fullDoc &&
-        !edit &&
-        false(
-          <>
-            <Box
-              sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
+      {isLoaded && fullDoc && false && !edit && (
+        <>
+          <Box
+            sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
+          >
+            <Button
+              variant="contained"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 0}
             >
-              <Button
-                variant="contained"
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage === 0}
-              >
-                Назад
-              </Button>
-              <Typography variant="body1" sx={{ alignSelf: "center" }}>
-                Страница {currentPage + 1} из {totalPages}
-              </Typography>
-              <Button
-                variant="contained"
-                onClick={() => goToPage(currentPage + 1)}
-                disabled={currentPage + 1 >= totalPages}
-              >
-                Вперёд
-              </Button>
-            </Box>
+              Назад
+            </Button>
+            <Typography variant="body1" sx={{ alignSelf: "center" }}>
+              Страница {currentPage + 1} из {totalPages}
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage + 1 >= totalPages}
+            >
+              Вперёд
+            </Button>
+          </Box>
 
-            <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
-              <MenuButton
-                label={`Абзацев на страницу: ${pageLabel}`}
-                items={{
-                  50: () => updateBlockSize(50),
-                  100: () => updateBlockSize(100),
-                  200: () => updateBlockSize(200),
-                  500: () => updateBlockSize(500),
-                  "-1": () => updateBlockSize(-1),
-                }}
-                renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
-              />
-            </Box>
-          </>
-        )}
+          <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
+            <MenuButton
+              label={`Абзацев на страницу: ${pageLabel}`}
+              items={{
+                50: () => updateBlockSize(50),
+                100: () => updateBlockSize(100),
+                200: () => updateBlockSize(200),
+                500: () => updateBlockSize(500),
+                "-1": () => updateBlockSize(-1),
+              }}
+              renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
+            />
+          </Box>
+        </>
+      )}
     </>
   );
 }
