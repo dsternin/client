@@ -13,7 +13,11 @@ import { useSearchParams } from "next/navigation";
 
 export default function Reader() {
   const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
-  const { editor, isLoaded } = useBookEditor(book, edit, setBookLabel);
+  const { editor, isLoaded, isReadyToScroll } = useBookEditor(
+    book,
+    edit,
+    setBookLabel
+  );
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -214,9 +218,9 @@ export default function Reader() {
   useEffect(() => {
     function goToSection(id) {
       if (!fullDoc || !Array.isArray(fullDoc.content)) return;
-      const index = fullDoc.content.findIndex(
-        (block) => block.attrs?.id === id
-      );
+      const index = fullDoc.content.findIndex((block) => {
+        return block.attrs?.id === id;
+      });
       if (index === -1) return;
 
       if (pageBlockSize === -1) {
@@ -240,7 +244,7 @@ export default function Reader() {
       setCurrentPage(pageIndex);
       editor.commands.setContent(sliced, false);
 
-      waitForElement(`#${CSS.escape(id)}`, 10).then((el) => {
+      waitForElement(`#${CSS.escape(id)}`).then((el) => {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
@@ -248,8 +252,17 @@ export default function Reader() {
     if (!isLoaded || (!initialSection && !initialPoint)) return;
     triggerHighlight();
     const targetId = initialPoint || initialSection;
-    goToSection(targetId);
-  }, [editor, isLoaded, initialPoint, initialSection]);
+    if (isReadyToScroll) {
+      goToSection(targetId);
+    }
+  }, [
+    editor,
+    isLoaded,
+    initialPoint,
+    initialSection,
+    isReadyToScroll,
+    fullDoc,
+  ]);
 
   const totalPages = fullDoc
     ? pageBlockSize === -1
@@ -291,7 +304,7 @@ export default function Reader() {
 
       <EditorContent editor={editor} />
 
-      {isLoaded && fullDoc && false && !edit && (
+      {isLoaded && fullDoc  && !edit && (
         <>
           <Box
             sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
@@ -370,27 +383,21 @@ function getRelativePositionInSlice(
   return pos + charIndex;
 }
 
-function waitForElement(selector, timeout = 3000) {
+function waitForElement(selector, timeout = 5000, interval = 200) {
   return new Promise((resolve) => {
-    const el = document.querySelector(selector);
-    if (el) return resolve(el);
+    const start = Date.now();
 
-    const observer = new MutationObserver(() => {
+    const check = () => {
       const el = document.querySelector(selector);
-      if (el) {
-        observer.disconnect();
-        resolve(el);
+      if (el) return resolve(el);
+
+      if (Date.now() - start > timeout) {
+        return resolve(null);
       }
-    });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
+      setTimeout(check, interval);
+    };
 
-    setTimeout(() => {
-      observer.disconnect();
-      resolve(null);
-    }, timeout);
+    check();
   });
 }

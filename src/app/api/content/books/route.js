@@ -67,7 +67,7 @@ export async function GET(req) {
     if (!bookDoc) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-
+    await new Promise((res) => setTimeout(res, 3000));
     const chapterNames = await getBookChaptersWithTitles(bookDoc);
 
     return NextResponse.json({

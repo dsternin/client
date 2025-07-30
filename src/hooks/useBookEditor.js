@@ -35,6 +35,8 @@ function addIdsToHeadings(content) {
 
 export default function useBookEditor(book, editable, setBookLabel = () => {}) {
   const [isLoaded, setIsloaded] = useState(false);
+  const [isReadyToScroll, setIsReadyToScroll] = useState(false);
+
   const editor = useEditor({
     extensions: getEditorExtensions(),
     immediatelyRender: false,
@@ -44,7 +46,19 @@ export default function useBookEditor(book, editable, setBookLabel = () => {}) {
 
   useEffect(() => {
     if (!book || !editor) return;
+
     setIsloaded(false);
+    setIsReadyToScroll(false);
+    editor.commands.setContent({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Загрузка..." }],
+        },
+      ],
+    });
+
     fetch(`/api/content/books?book=${book}`)
       .then(async (res) => {
         if (res.status === 404) {
@@ -83,8 +97,11 @@ export default function useBookEditor(book, editable, setBookLabel = () => {}) {
         const combinedContent = allChapters.flat();
         editor.commands.setContent({ type: "doc", content: combinedContent });
         setIsloaded(true);
+        requestAnimationFrame(() => {
+          setIsReadyToScroll(true);
+        });
       });
   }, [book, editor]);
 
-  return { editor, isLoaded };
+  return { editor, isLoaded, isReadyToScroll };
 }
