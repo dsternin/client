@@ -64,7 +64,6 @@ body {
   top: 0;
   z-index: 1000;
   width: 100%;
-  padding: 1rem 1.5rem;
   background-color: rgba(248, 244, 239, 0.75);
   backdrop-filter: blur(4px);
 }

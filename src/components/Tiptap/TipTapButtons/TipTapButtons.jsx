@@ -50,13 +50,15 @@ export default function TipTapButtons({ editor, save }) {
   return (
     <Box
       sx={{
-        zIndex: 999,
-        top: "14rem",
+        zIndex: 1000,
+        top: "10.5rem",
         mb: 2,
         display: "flex",
         flexWrap: "wrap",
         gap: 1,
         position: "sticky",
+        // "background-color": "rgba(248, 244, 239, 0.75)",
+        "backdrop-filter": "blur(4px)",
       }}
     >
       <MenuButton
