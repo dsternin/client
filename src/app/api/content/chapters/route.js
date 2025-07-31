@@ -18,9 +18,6 @@ export const ChapterSchema = new mongoose.Schema(
 
 ChapterSchema.index({ book: 1, section: 1 }, { unique: true });
 
-const Chapter =
-  mongoose.models.Chapter || mongoose.model("Chapter", ChapterSchema);
-
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
