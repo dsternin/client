@@ -47,6 +47,7 @@ export default function Search({ editor, fullDoc, goToMatch }) {
 
   const searchInDocument = (doc, query) => {
     const matches = [];
+    query = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     doc.content.forEach((block, blockIndex) => {
       if (!block.content) return;
       block.content.forEach((child, childIndex) => {

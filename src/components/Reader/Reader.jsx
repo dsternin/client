@@ -242,7 +242,9 @@ export default function Reader() {
       };
 
       setCurrentPage(pageIndex);
-      editor.commands.setContent(sliced, false);
+      setTimeout(() => {
+        editor.commands.setContent(sliced, false);
+      }, 0);
 
       waitForElement(`#${CSS.escape(id)}`).then((el) => {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -334,8 +336,8 @@ export default function Reader() {
               items={{
                 50: () => updateBlockSize(50),
                 100: () => updateBlockSize(100),
-                200: () => updateBlockSize(200),
                 500: () => updateBlockSize(500),
+                1000: () => updateBlockSize(1000),
                 "-1": () => updateBlockSize(-1),
               }}
               renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}

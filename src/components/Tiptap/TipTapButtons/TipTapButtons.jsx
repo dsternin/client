@@ -58,7 +58,7 @@ export default function TipTapButtons({ editor, save }) {
         gap: 1,
         position: "sticky",
         // "background-color": "rgba(248, 244, 239, 0.75)",
-        "backdrop-filter": "blur(4px)",
+        backdropFilter: "blur(4px)",
       }}
     >
       <MenuButton
