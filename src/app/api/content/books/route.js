@@ -3,6 +3,7 @@ import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
 
 import { loadChapter } from "../chapters/route";
+import { cleanAllOldFiles } from "../claerCache/route";
 
 export const BookSchema = new mongoose.Schema(
   {
@@ -83,7 +84,7 @@ export async function GET(req) {
 
 export async function PUT(req) {
   try {
-    await dbConnect();
+    const conn = await dbConnect();
     const { book, chapters } = await req.json();
 
     if (!book || !Array.isArray(chapters)) {
@@ -96,6 +97,7 @@ export async function PUT(req) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     chapterCache.delete(book);
+    cleanAllOldFiles(conn.connection.db);
     return NextResponse.json({ ok: true, id: updated._id });
   } catch (error) {
     console.error(error);

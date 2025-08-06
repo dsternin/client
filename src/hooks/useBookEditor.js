@@ -103,5 +103,5 @@ export default function useBookEditor(book, editable, setBookLabel = () => {}) {
       });
   }, [book, editor]);
 
-  return { editor, isLoaded, isReadyToScroll };
+  return { editor, isLoaded, isReadyToScroll, setIsReadyToScroll };
 }

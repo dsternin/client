@@ -2,11 +2,8 @@ import dbConnect from "@/lib/db";
 import { GridFSBucket } from "mongodb";
 import { NextResponse } from "next/server";
 
-/**
- * Очищает старые версии всех файлов в GridFS, оставляя только самые свежие.
- * @param {import('mongodb').Db} db
- */
-async function cleanAllOldFiles(db) {
+
+export async function cleanAllOldFiles(db) {
   const bucket = new GridFSBucket(db);
   const files = await bucket.find({}).toArray();
   const grouped = files.reduce((acc, file) => {
@@ -25,7 +22,6 @@ async function cleanAllOldFiles(db) {
   }
 }
 
-// GET-роут для очистки всего кеша GridFS
 export async function GET() {
   const conn = await dbConnect();
   const db = conn.connection.db;

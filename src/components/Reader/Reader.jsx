@@ -13,11 +13,8 @@ import { useSearchParams } from "next/navigation";
 
 export default function Reader() {
   const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
-  const { editor, isLoaded, isReadyToScroll } = useBookEditor(
-    book,
-    edit,
-    setBookLabel
-  );
+  const { editor, isLoaded, isReadyToScroll, setIsReadyToScroll } =
+    useBookEditor(book, edit, setBookLabel);
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -60,20 +57,18 @@ export default function Reader() {
 
   async function save() {
     if (!editor || !book || !fullDoc) return;
+    setIsReadyToScroll(false);
 
     const editedPageContent = editor.getJSON().content;
     const pageStart = currentPage * pageBlockSize;
     const pageEnd = pageStart + pageBlockSize;
-
     const updatedFullDoc = {
       ...fullDoc,
-      content: [
-        ...fullDoc.content.slice(0, pageStart),
-        ...editedPageContent,
-        ...fullDoc.content.slice(pageEnd),
-      ],
+      content: [...fullDoc.content.slice(0, pageStart), ...editedPageContent],
     };
-
+    if (pageEnd > -1) {
+      updatedFullDoc.content.push(...fullDoc.content.slice(pageEnd));
+    }
     const fullContent = updatedFullDoc;
     const chapters = [];
     let currentChapter = null;
