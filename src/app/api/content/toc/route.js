@@ -19,14 +19,12 @@ export async function GET() {
 
       const chapters = await getBookChaptersWithTitles(book);
       console.log("end chapters");
-
       result.push({
         name: book.name,
         label: book.label,
         chapters,
       });
     }
-
     return NextResponse.json(result);
   } catch (error) {
     console.error(error);

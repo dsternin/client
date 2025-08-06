@@ -18,7 +18,7 @@ export default function Reader() {
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
-  const [pageBlockSize, setPageBlockSize] = useState(-1);
+  const [pageBlockSize, setPageBlockSize] = useState(500);
   function updateBlockSize(value) {
     const newSize = parseInt(value);
     setPageBlockSize(newSize);
@@ -43,7 +43,7 @@ export default function Reader() {
   const initialSection = searchParams.get("section");
   const initialPoint = searchParams.get("point");
 
-  useNearestHeadings(setSection, setPoint);
+  useNearestHeadings(setSection, setPoint, fullDoc, currentPage, pageBlockSize);
 
   useEffect(() => {
     if (editor) {
@@ -301,7 +301,7 @@ export default function Reader() {
 
       <EditorContent editor={editor} />
 
-      {isLoaded && fullDoc && false && !edit && (
+      {isLoaded && fullDoc && !edit && (
         <>
           <Box
             sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}

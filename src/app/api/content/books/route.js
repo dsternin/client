@@ -24,7 +24,6 @@ export async function getBookChaptersWithTitles(bookDoc) {
   const now = Date.now();
   if (cacheEntry && now - cacheEntry.timestamp < CACHE_TTL_MS) {
     console.log("from cache");
-
     return cacheEntry.data;
   }
   const chapterMap = new Map();

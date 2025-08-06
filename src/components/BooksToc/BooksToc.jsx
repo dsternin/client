@@ -19,7 +19,7 @@ import { useRouter } from "next/navigation";
 import useToc from "@/hooks/useToc";
 
 export default function BooksToc() {
-  const toc = useToc();
+  const { toc, trigger } = useToc();
   const [open, setOpen] = useState(false);
   const [expandedBook, setExpandedBook] = useState(false);
   const [expandedChapter, setExpandedChapter] = useState(false);
@@ -47,7 +47,10 @@ export default function BooksToc() {
       {!open && (
         <Button
           variant="contained"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setOpen(true);
+            trigger();
+          }}
           sx={{
             marginLeft: 2,
             textTransform: "none",

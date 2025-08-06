@@ -15,7 +15,7 @@ import {
 import { useState } from "react";
 
 export default function ChapterLinkDialog({ open, onClose, onInsert }) {
-  const toc = useToc();
+  const {toc} = useToc();
   const [selectedBook, setSelectedBook] = useState("");
   const [selectedChapter, setSelectedChapter] = useState("");
   const [selectedPoint, setSelectedPoint] = useState("");
