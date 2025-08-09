@@ -71,22 +71,49 @@ export default function useNearestHeadings(
       ? Number.POSITIVE_INFINITY
       : pageStart + pageBlockSize;
 
-    function fallbackH1() {
-      const prev = heads1.filter((h) => h.blockIndex < pageStart);
-      if (!prev.length) return undefined;
-      return prev.reduce((a, b) => (a.blockIndex > b.blockIndex ? a : b));
-    }
-    function fallbackH2(withinH1) {
-      if (!withinH1) return;
-      const nextH1 = heads1.find((h) => h.blockIndex > withinH1.blockIndex);
-      const candidates = heads2.filter(
-        (h) =>
-          h.blockIndex > withinH1.blockIndex &&
-          (!nextH1 || h.blockIndex < nextH1.blockIndex)
+    const getOwnerH1 = (blockIndex) => {
+      let owner = null;
+      for (let i = 0; i < heads1.length; i++) {
+        if (heads1[i].blockIndex <= blockIndex) owner = heads1[i];
+        else break;
+      }
+      return owner;
+    };
+
+    const getNextH1After = (h1) => {
+      if (!h1) return null;
+      for (let i = 0; i < heads1.length; i++) {
+        if (heads1[i].blockIndex > h1.blockIndex) return heads1[i];
+      }
+      return null;
+    };
+
+    const lastH1BeforePage = () => {
+      let res = null;
+      for (let i = 0; i < heads1.length; i++) {
+        if (heads1[i].blockIndex < pageStart) res = heads1[i];
+        else break;
+      }
+      return res;
+    };
+
+    const lastH2InRangeBeforePageStart = (h1) => {
+      if (!h1) return null;
+      const next = getNextH1After(h1);
+      const upper = Math.min(
+        next ? next.blockIndex : Number.POSITIVE_INFINITY,
+        pageStart
       );
-      if (!candidates.length) return undefined;
-      return candidates.reduce((a, b) => (a.blockIndex > b.blockIndex ? a : b));
-    }
+      let best = null;
+      for (let i = 0; i < heads2.length; i++) {
+        const h2 = heads2[i];
+        if (h2.blockIndex >= h1.blockIndex && h2.blockIndex < upper) {
+          if (!best || h2.blockIndex > best.blockIndex) best = h2;
+        }
+        if (h2.blockIndex >= upper) break;
+      }
+      return best;
+    };
 
     function updateOnScroll() {
       const centerY = window.innerHeight / 2;
@@ -106,15 +133,16 @@ export default function useNearestHeadings(
       let nextPoint = "";
 
       if (visibleH1.length) {
-        const nearestH1 = visibleH1[0].el;
-        nextSection = nearestH1.id;
+        const nearestH1El = visibleH1[0].el;
+        const nearestH1Idx = idxMap1[nearestH1El.id];
+        nextSection = nearestH1El.id;
 
         const nextH1El = domH1
           .filter((el) => {
             const idx = idxMap1[el.id];
             return idx >= pageStart && idx < pageEnd;
           })
-          .find((el) => idxMap1[el.id] > idxMap1[nearestH1.id]);
+          .find((el) => idxMap1[el.id] > nearestH1Idx);
 
         const visibleH2 = domH2
           .filter((el) => {
@@ -124,7 +152,7 @@ export default function useNearestHeadings(
             if (rect.top >= centerY) return false;
             if (
               !(
-                nearestH1.compareDocumentPosition(el) &
+                nearestH1El.compareDocumentPosition(el) &
                 Node.DOCUMENT_POSITION_FOLLOWING
               )
             )
@@ -144,7 +172,15 @@ export default function useNearestHeadings(
               b.getBoundingClientRect().top - a.getBoundingClientRect().top
           );
 
-        nextPoint = visibleH2[0]?.id || "";
+        if (visibleH2.length) {
+          nextPoint = visibleH2[0].id || "";
+        } else {
+          const h1Meta =
+            heads1.find((h) => h.id === nextSection) ||
+            getOwnerH1(nearestH1Idx);
+          const fallbackH2 = lastH2InRangeBeforePageStart(h1Meta);
+          nextPoint = fallbackH2 ? fallbackH2.id : "";
+        }
       } else {
         const visibleH2Only = domH2
           .filter((el) => {
@@ -161,20 +197,14 @@ export default function useNearestHeadings(
         if (visibleH2Only.length) {
           const h2El = visibleH2Only[0];
           const h2Idx = idxMap2[h2El.id];
-          const ownerH1 =
-            heads1
-              .filter((h) => h.blockIndex <= h2Idx)
-              .reduce(
-                (a, b) => (a && a.blockIndex > b.blockIndex ? a : b),
-                null
-              ) || fallbackH1();
+          const ownerH1 = getOwnerH1(h2Idx) || lastH1BeforePage();
           nextSection = ownerH1?.id || "";
           nextPoint = h2El.id;
         } else {
-          const fbH1 = fallbackH1();
-          nextSection = fbH1?.id || "";
-          const fbH2 = fallbackH2(fbH1);
-          nextPoint = fbH2?.id || "";
+          const h1Prev = lastH1BeforePage();
+          nextSection = h1Prev?.id || "";
+          const h2Prev = lastH2InRangeBeforePageStart(h1Prev);
+          nextPoint = h2Prev ? h2Prev.id : "";
         }
       }
 
