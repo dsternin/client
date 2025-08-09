@@ -64,8 +64,12 @@ export default function useNearestHeadings(
     const { heads1, heads2 } = getHeadingsFromJsonWithIndex(fullDoc);
     const idxMap1 = Object.fromEntries(heads1.map((h) => [h.id, h.blockIndex]));
     const idxMap2 = Object.fromEntries(heads2.map((h) => [h.id, h.blockIndex]));
-    const pageStart = currentPage * pageBlockSize;
-    const pageEnd = pageStart + pageBlockSize;
+
+    const allText = pageBlockSize === -1 || pageBlockSize === Infinity;
+    const pageStart = allText ? 0 : currentPage * pageBlockSize;
+    const pageEnd = allText
+      ? Number.POSITIVE_INFINITY
+      : pageStart + pageBlockSize;
 
     function fallbackH1() {
       const prev = heads1.filter((h) => h.blockIndex < pageStart);
@@ -142,10 +146,36 @@ export default function useNearestHeadings(
 
         nextPoint = visibleH2[0]?.id || "";
       } else {
-        const fbH1 = fallbackH1();
-        nextSection = fbH1?.id || "";
-        const fbH2 = fallbackH2(fbH1);
-        nextPoint = fbH2?.id || "";
+        const visibleH2Only = domH2
+          .filter((el) => {
+            const idx = idxMap2[el.id];
+            if (idx < pageStart || idx >= pageEnd) return false;
+            const rect = el.getBoundingClientRect();
+            return rect.top < centerY;
+          })
+          .sort(
+            (a, b) =>
+              b.getBoundingClientRect().top - a.getBoundingClientRect().top
+          );
+
+        if (visibleH2Only.length) {
+          const h2El = visibleH2Only[0];
+          const h2Idx = idxMap2[h2El.id];
+          const ownerH1 =
+            heads1
+              .filter((h) => h.blockIndex <= h2Idx)
+              .reduce(
+                (a, b) => (a && a.blockIndex > b.blockIndex ? a : b),
+                null
+              ) || fallbackH1();
+          nextSection = ownerH1?.id || "";
+          nextPoint = h2El.id;
+        } else {
+          const fbH1 = fallbackH1();
+          nextSection = fbH1?.id || "";
+          const fbH2 = fallbackH2(fbH1);
+          nextPoint = fbH2?.id || "";
+        }
       }
 
       setSection(nextSection);
