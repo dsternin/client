@@ -2,16 +2,19 @@
 
 import useBookEditor from "@/hooks/useBookEditor";
 import { EditorContent } from "@tiptap/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Search from "../Search";
 import { CircularProgress, Box, Button, Typography } from "@mui/material";
 import { useBookContext } from "@/store/BookContext";
 import TipTapButtons from "../Tiptap/TipTapButtons";
 import MenuButton from "../MenuButtons";
 import useNearestHeadings from "@/hooks/useNearestHeadings";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function Reader() {
+  const router = useRouter();
+  const containerRef = useRef(null);
+
   const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
   const { editor, isLoaded, isReadyToScroll, setIsReadyToScroll } =
     useBookEditor(book, edit, setBookLabel);
@@ -266,6 +269,73 @@ export default function Reader() {
       ? 1
       : Math.ceil(fullDoc.content.length / pageBlockSize)
     : 0;
+
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+
+    function isModifiedEvent(e) {
+      return e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0;
+    }
+
+    function toURL(href) {
+      if (!href) return null;
+      try {
+        return new URL(href, window.location.origin);
+      } catch {
+        return null;
+      }
+    }
+
+    const onClick = (e) => {
+      if (editor?.isEditable) return;
+
+      const target = e.target;
+      const a = target?.closest("a");
+      if (!a) return;
+
+      if (a.dataset.tiptapIgnore === "true") return;
+
+      const url = toURL(a.getAttribute("href"));
+      if (!url) return;
+
+      const sameOrigin = url.origin === window.location.origin;
+      if (!sameOrigin || isModifiedEvent(e) || a.target === "_blank") return;
+
+      e.preventDefault();
+
+      const samePath = url.pathname === window.location.pathname && !url.search;
+      if (samePath && url.hash) {
+        document.getElementById(url.hash.slice(1))?.scrollIntoView({
+          behavior: "smooth",
+        });
+        return;
+      }
+
+      router.push(url.pathname + url.search + url.hash);
+    };
+
+    const onMouseEnter = (e) => {
+      const target = e.target;
+      const a = target?.closest("a");
+      if (!a) return;
+
+      const url = toURL(a.getAttribute("href"));
+      if (!url) return;
+
+      if (url.origin === window.location.origin) {
+        router.prefetch?.(url.pathname + url.search + url.hash);
+      }
+    };
+
+    root.addEventListener("click", onClick, true);
+    root.addEventListener("mouseenter", onMouseEnter, true);
+
+    return () => {
+      root.removeEventListener("click", onClick, true);
+      root.removeEventListener("mouseenter", onMouseEnter, true);
+    };
+  }, [editor, router]);
   return (
     <>
       {isLoaded ? (
@@ -275,6 +345,7 @@ export default function Reader() {
             editor={editor}
             fullDoc={fullDoc}
             goToMatch={goToMatch}
+            setBookLabel={setBookLabel}
           />
         )
       ) : (
@@ -299,7 +370,9 @@ export default function Reader() {
         />
       ) : null}
 
-      <EditorContent editor={editor} />
+      <div ref={containerRef}>
+        <EditorContent editor={editor} />
+      </div>
 
       {isLoaded && fullDoc && !edit && (
         <>
