@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   TextField,
   Button,
@@ -12,6 +12,24 @@ import {
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close";
+
+const CACHE_MAX = 12;
+const searchCache = new Map();
+const lruTouch = (key) => {
+  if (!searchCache.has(key)) return;
+  const v = searchCache.get(key);
+  searchCache.delete(key);
+  searchCache.set(key, v);
+};
+const lruSet = (key, val) => {
+  if (searchCache.has(key)) searchCache.delete(key);
+  searchCache.set(key, val);
+  while (searchCache.size > CACHE_MAX) {
+    const oldest = searchCache.keys().next().value;
+    searchCache.delete(oldest);
+  }
+};
+const normalizeQ = (q) => (q || "").trim().toLowerCase();
 
 export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const searchParams = useSearchParams();
@@ -32,6 +50,8 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const [error, setError] = useState(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
+  const abortRef = useRef(null);
+
   const resetResults = () => {
     setMatches(null);
     setCount(0);
@@ -40,7 +60,6 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     setCursor(0);
     setError(null);
   };
-
 
   useEffect(() => {
     setQueryInput(query);
@@ -80,46 +99,92 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     return results;
   };
 
+  const getDocVersion = (doc) => {
+    if (!doc) return "0";
+    if (doc.version) return String(doc.version);
+    const blocks = doc?.content || [];
+    const blocksCount = blocks.length;
+    const childrenSum = blocks.reduce(
+      (s, b) => s + (b?.content?.length || 0),
+      0
+    );
+    return `${blocksCount}:${childrenSum}`;
+  };
+
   const handleSearch = async (searchQuery) => {
-    const q = searchQuery.trim();
-    if (!q || !editor || !fullDoc) return; // ← обовʼязково є fullDoc!
+    const q = (searchQuery || "").trim();
+    if (!q || !editor || !fullDoc) return;
 
     setLoading(true);
     setError(null);
     setBooksMatches([]);
 
     try {
-      // підсумки по всіх книгах (без змін)
-      const toc = await (await fetch("/api/content/toc")).json();
-      let globalTotal = 0;
-      const list = [];
-      for (const b of toc) {
-        const metaRes = await fetch(
-          `/api/content/books?book=${encodeURIComponent(b.name)}`
-        );
-        const meta = await metaRes.json();
-        const label = meta.label || b.name;
-        const chapters = meta.chapters || [];
-        const blocks = [];
-        for (const ch of chapters) {
-          const chRes = await fetch(
-            `/api/content/chapters?book=${encodeURIComponent(
-              b.name
-            )}&section=${encodeURIComponent(ch.title)}`
-          );
-          const chData = await chRes.json();
-          blocks.push(...(chData.content?.content || []));
-        }
-        const bookCount = searchInDocument({ content: blocks }, q).length;
-        list.push({ name: b.name, label, count: bookCount });
-        globalTotal += bookCount;
-      }
-      setBooksMatches(list);
-      setTotalCount(globalTotal);
+      const key = normalizeQ(q);
+      let cached = searchCache.get(key);
+      if (!cached) cached = { perBook: new Map() };
 
-      // ГОЛОВНЕ: шукаємо в усьому документі поточної книги
-      const localMatches = searchInDocument(fullDoc, q);
-      const localCount = localMatches.length;
+      if (!cached.global) {
+        abortRef.current?.abort?.();
+        abortRef.current = new AbortController();
+        const { signal } = abortRef.current;
+
+        const tocRes = await fetch("/api/content/toc", { signal });
+        const toc = await tocRes.json();
+        let globalTotal = 0;
+        const list = [];
+
+        for (const b of toc) {
+          const metaRes = await fetch(
+            `/api/content/books?book=${encodeURIComponent(b.name)}`,
+            { signal }
+          );
+          const meta = await metaRes.json();
+          const label = meta.label || b.name;
+          const chapters = meta.chapters || [];
+          const blocks = [];
+          for (const ch of chapters) {
+            const chRes = await fetch(
+              `/api/content/chapters?book=${encodeURIComponent(
+                b.name
+              )}&section=${encodeURIComponent(ch.title)}`,
+              { signal }
+            );
+            const chData = await chRes.json();
+            blocks.push(...(chData.content?.content || []));
+          }
+          const bookCount = searchInDocument({ content: blocks }, q).length;
+          list.push({ name: b.name, label, count: bookCount });
+          globalTotal += bookCount;
+        }
+        cached.global = { list, total: globalTotal };
+        lruSet(key, cached);
+      } else {
+        lruTouch(key);
+      }
+
+      setBooksMatches(searchCache.get(key).global.list);
+      setTotalCount(searchCache.get(key).global.total);
+
+      const current = searchCache.get(key);
+      const bookKey = book || "__current__";
+      const currentVersion = getDocVersion(fullDoc);
+      const cachedBook = current.perBook.get(bookKey);
+
+      let localMatches, localCount;
+      if (cachedBook && cachedBook.version === currentVersion) {
+        ({ matches: localMatches } = cachedBook);
+        localCount = cachedBook.count;
+      } else {
+        localMatches = searchInDocument(fullDoc, q);
+        localCount = localMatches.length;
+        current.perBook.set(bookKey, {
+          matches: localMatches,
+          count: localCount,
+          version: currentVersion,
+        });
+        lruSet(key, current);
+      }
 
       if (localCount > 0) {
         setCursor(0);
@@ -188,13 +253,13 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     setHasSubmitted(false);
 
     const url = new URL(window.location.href);
-    const trimmed = q.trim();
+    const trimmed = (q || "").trim();
     if (trimmed.length === 0) url.searchParams.delete("query");
     else url.searchParams.set("query", trimmed);
     window.history.replaceState(window.history.state, "", url.toString());
   };
 
-  const hasQuery = queryInput.trim().length > 0;
+  const hasQuery = (queryInput || "").trim().length > 0;
   const currentBook = booksMatches.find((b) => b.name === book) || {};
   const currentLabel = currentBook.label || book;
 
