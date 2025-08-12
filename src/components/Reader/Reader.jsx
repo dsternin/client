@@ -345,7 +345,7 @@ export default function Reader() {
             editor={editor}
             fullDoc={fullDoc}
             goToMatch={goToMatch}
-            setBookLabel={setBookLabel}
+            isLoaded={isLoaded}
           />
         )
       ) : (

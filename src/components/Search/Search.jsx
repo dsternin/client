@@ -13,75 +13,120 @@ import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close";
 
-export default function Search({ editor, fullDoc, goToMatch }) {
+export default function Search({ goToMatch, editor, isLoaded }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
 
-  const [queryInput, setQueryInput] = useState("");
-  const [matches, setMatches] = useState(null);
-  const [count, setCount] = useState(0);
-  const [cursor, setCursor] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [open, setOpen] = useState(false);
-
   const book = searchParams.get("book");
   const query = searchParams.get("query") || "";
 
+  const [open, setOpen] = useState(false);
+  const [queryInput, setQueryInput] = useState("");
+  const [matches, setMatches] = useState(null);
+  const [count, setCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [booksMatches, setBooksMatches] = useState([]);
+  const [cursor, setCursor] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [hasSubmitted, setHasSubmitted] = useState(false); // ← нове
+
+  const resetResults = () => {
+    setMatches(null);
+    setCount(0);
+    setTotalCount(0);
+    setBooksMatches([]);
+    setCursor(0);
+    setError(null);
+  };
+
+  // Ініціалізація з URL (вважаємо як сабмітований пошук)
   useEffect(() => {
     setQueryInput(query);
-    if (query.trim() && fullDoc?.content?.length > 0) {
+    if (query.trim() && isLoaded) {
+      setHasSubmitted(true);
       handleSearch(query);
       setOpen(true);
-    } else {
-      setMatches(null);
-      setCount(0);
     }
-  }, [query, book, fullDoc]);
+  }, [query, isLoaded]);
 
+  // Автоперехід до поточного збігу
   useEffect(() => {
-    if (!count || !matches?.[cursor] || !editor || !goToMatch) return;
-    goToMatch(matches[cursor]);
+    if (count > 0 && matches?.[cursor] && editor) {
+      goToMatch(matches[cursor]);
+    }
   }, [cursor, matches, count, editor]);
 
-  const searchInDocument = (doc, query) => {
-    const matches = [];
-    query = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    doc.content.forEach((block, blockIndex) => {
-      if (!block.content) return;
+  const searchInDocument = (doc, q) => {
+    const results = [];
+    const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(safe, "gi");
+    (doc.content || []).forEach((block, blockIndex) => {
+      if (!block?.content) return;
       block.content.forEach((child, childIndex) => {
-        if (child.text) {
-          const regex = new RegExp(query, "gi");
-          let match;
-          while ((match = regex.exec(child.text))) {
-            matches.push({
+        if (child?.text) {
+          let m;
+          while ((m = regex.exec(child.text))) {
+            results.push({
               blockIndex,
               childIndexPath: [childIndex],
-              charIndex: match.index,
-              length: match[0].length,
+              charIndex: m.index,
+              length: m[0].length,
             });
           }
         }
       });
     });
-    return matches;
+    return results;
   };
 
   const handleSearch = async (searchQuery) => {
-    if (!searchQuery.trim()) return;
+    const q = searchQuery.trim();
+    if (!q) return;
+
     setLoading(true);
     setError(null);
+    setBooksMatches([]);
 
     try {
-      if (!fullDoc) throw new Error("Документ не загружен");
-      const matches = searchInDocument(fullDoc, searchQuery);
-      const count = matches.length;
+      // Підсумки по всіх книгах
+      const toc = await (await fetch("/api/content/toc")).json();
+      let globalTotal = 0;
+      const list = [];
+      for (const b of toc) {
+        const metaRes = await fetch(
+          `/api/content/books?book=${encodeURIComponent(b.name)}`
+        );
+        const meta = await metaRes.json();
+        const label = meta.label || b.name;
+        const chapters = meta.chapters || [];
+        const blocks = [];
+        for (const ch of chapters) {
+          const chRes = await fetch(
+            `/api/content/chapters?book=${encodeURIComponent(
+              b.name
+            )}&section=${encodeURIComponent(ch.title)}`
+          );
+          const chData = await chRes.json();
+          blocks.push(...(chData.content?.content || []));
+        }
+        const bookCount = searchInDocument({ content: blocks }, q).length;
+        list.push({ name: b.name, label, count: bookCount });
+        globalTotal += bookCount;
+      }
+      setBooksMatches(list);
+      setTotalCount(globalTotal);
 
-      if (count) {
+      if (!editor) throw new Error("Editor not ready");
+      const fullDoc = editor.getJSON();
+      const localMatches = searchInDocument(fullDoc, q);
+      const localCount = localMatches.length;
+
+      if (localCount > 0) {
         setCursor(0);
-        setMatches(matches);
-        setCount(count);
+        setMatches(localMatches);
+        setCount(localCount);
       } else {
         setMatches(null);
         setCount(0);
@@ -96,52 +141,66 @@ export default function Search({ editor, fullDoc, goToMatch }) {
   };
 
   const applySearch = () => {
+    const trimmed = (queryInput || "").trim();
+    setHasSubmitted(!!trimmed); // показуємо результати/помилки лише після сабміту
     const params = new URLSearchParams(searchParams);
-    if (queryInput) {
-      params.set("query", queryInput);
-    } else {
-      params.delete("query");
-    }
-    router.push(`${pathname}?${params.toString()}`);
+    if (trimmed) params.set("query", trimmed);
+    else params.delete("query");
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
-  async function searchInNextBook() {
-    const toc = await (await fetch("/api/content/toc")).json();
-    const currentBook = searchParams.get("book");
-    const currentIndex = toc.findIndex((b) => b.name === currentBook);
-    const nextBook = toc[(currentIndex + 1) % toc.length];
-    if (nextBook?.chapters?.length) {
-      const params = new URLSearchParams(searchParams);
-      params.set("book", nextBook.name);
-      params.set("section", nextBook.chapters[0].title);
-      params.set("query", queryInput);
-      router.push(`${pathname}?${params.toString()}`);
-    }
-  }
+  const goToBook = (name) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("book", name);
+    const trimmed = (queryInput || "").trim();
+    if (trimmed) params.set("query", trimmed);
+    else params.delete("query");
+    params.delete("section");
+    setHasSubmitted(!!trimmed);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
-  async function searchInPrevBook() {
-    const toc = await (await fetch("/api/content/toc")).json();
-    const currentBook = searchParams.get("book");
-    const currentIndex = toc.findIndex((b) => b.name === currentBook);
-    const prevBook = toc[(currentIndex - 1 + toc.length) % toc.length];
-    if (prevBook?.chapters?.length) {
-      const params = new URLSearchParams(searchParams);
-      params.set("book", prevBook.name);
-      params.set("section", prevBook.chapters[0].title);
-      params.set("query", queryInput);
-      router.push(`${pathname}?${params.toString()}`);
-    }
-  }
+  const handleOpen = () => {
+    setOpen(true);
+    resetResults();
+    setError(null);
+    setHasSubmitted(false);
+  };
 
-  async function next() {
+  const handleClose = () => {
+    setOpen(false);
     editor?.commands.unsetSearchHighlight();
-    setCursor((prev) => prev + 1);
-  }
+    setQueryInput("");
+    resetResults();
+    setHasSubmitted(false);
 
-  async function prev() {
+    const params = new URLSearchParams(searchParams);
+    params.delete("query");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  const handleChange = (e) => {
     editor?.commands.unsetSearchHighlight();
-    setCursor((prev) => prev - 1);
-  }
+    const q = e.target.value;
+    setQueryInput(q);
+
+    // Поки користувач набирає — нічого не показуємо
+    resetResults();
+    setHasSubmitted(false);
+
+    // Оновлення URL без навігації
+    const url = new URL(window.location.href);
+    const trimmed = q.trim();
+    if (trimmed.length === 0) url.searchParams.delete("query");
+    else url.searchParams.set("query", trimmed);
+    window.history.replaceState(window.history.state, "", url.toString());
+  };
+
+  const hasQuery = queryInput.trim().length > 0;
+  const currentBook = booksMatches.find((b) => b.name === book) || {};
+  const currentLabel = currentBook.label || book;
 
   return (
     <>
@@ -149,7 +208,7 @@ export default function Search({ editor, fullDoc, goToMatch }) {
         <Button
           variant="contained"
           startIcon={<SearchIcon />}
-          onClick={() => setOpen(true)}
+          onClick={handleOpen}
           sx={{ position: "fixed", bottom: 16, right: 16, zIndex: 1000 }}
         >
           Искать по книгам
@@ -172,14 +231,7 @@ export default function Search({ editor, fullDoc, goToMatch }) {
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
             <Typography variant="h6">Поиск по книгам</Typography>
-            <IconButton
-              size="small"
-              onClick={() => {
-                setOpen(false);
-                editor?.commands.unsetSearchHighlight();
-                setQueryInput("");
-              }}
-            >
+            <IconButton size="small" onClick={handleClose}>
               <CloseIcon />
             </IconButton>
           </Box>
@@ -188,14 +240,14 @@ export default function Search({ editor, fullDoc, goToMatch }) {
             <TextField
               label="Введите слово"
               value={queryInput}
-              onChange={(e) => setQueryInput(e.target.value)}
+              onChange={handleChange}
               fullWidth
               size="small"
             />
             <Button
               variant="contained"
               onClick={applySearch}
-              disabled={loading}
+              disabled={loading || !hasQuery}
             >
               Поиск
             </Button>
@@ -203,71 +255,58 @@ export default function Search({ editor, fullDoc, goToMatch }) {
 
           {loading && <CircularProgress size={24} />}
 
-          {count > 0 ? (
-            <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
-              {cursor > 0 ? (
-                <Button
-                  sx={{ height: 48 }}
-                  variant="outlined"
-                  onClick={prev}
-                  fullWidth
-                >
-                  Назад
-                </Button>
-              ) : (
-                <Button
-                  sx={{ height: 48 }}
-                  variant="outlined"
-                  onClick={searchInPrevBook}
-                  fullWidth
-                >
-                  Искать в предыдущей книге
-                </Button>
-              )}
-              {cursor < count - 1 ? (
-                <Button
-                  sx={{ height: 48 }}
-                  variant="outlined"
-                  onClick={next}
-                  fullWidth
-                >
-                  Далее
-                </Button>
-              ) : (
-                <Button
-                  sx={{ height: 48 }}
-                  variant="outlined"
-                  onClick={searchInNextBook}
-                  fullWidth
-                >
-                  Искать в следующей книге
-                </Button>
-              )}
-            </Box>
-          ) : (
-            <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
-              <Button
-                sx={{ height: 48 }}
-                variant="outlined"
-                onClick={searchInPrevBook}
-                fullWidth
-              >
-                Искать в предыдущей книге
-              </Button>
-              <Button
-                sx={{ height: 48 }}
-                variant="outlined"
-                onClick={searchInNextBook}
-                fullWidth
-              >
-                Искать в следующей книге
-              </Button>
+          {/* Показуємо статистику/результати тільки після сабміту */}
+          {!loading && hasQuery && hasSubmitted && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                Всего совпадений во всех книгах: {totalCount}.
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
+                {booksMatches.map((b) => (
+                  <Button
+                    key={b.name}
+                    variant={b.name === book ? "contained" : "outlined"}
+                    size="small"
+                    onClick={() => goToBook(b.name)}
+                  >
+                    {b.label}: {b.count}
+                  </Button>
+                ))}
+              </Box>
             </Box>
           )}
 
-          {error && (
-            <Typography color="error" sx={{ mt: 2 }}>
-              {error}
+          {hasQuery && hasSubmitted && count > 0 && (
+            <>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Текущая книга: {currentLabel}, совпадений в ней: {count}.
+              </Typography>
+              <Typography variant="body2">
+                Текущий результат: {cursor + 1} из {count}.
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => setCursor((p) => Math.max(p - 1, 0))}
+                >
+                  Назад
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => setCursor((p) => Math.min(p + 1, count - 1))}
+                >
+                  Далее
+                </Button>
+              </Box>
+            </>
+          )}
+
+          {/* Помилку показуємо лише після сабміту і завершення завантаження */}
+          {hasQuery && hasSubmitted && !loading && (error || count === 0) && (
+            <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+              {error || "Ничего не найдено."}
             </Typography>
           )}
         </Box>
