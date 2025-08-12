@@ -13,7 +13,7 @@ import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close";
 
-export default function Search({ goToMatch, editor, isLoaded }) {
+export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -30,7 +30,7 @@ export default function Search({ goToMatch, editor, isLoaded }) {
   const [cursor, setCursor] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [hasSubmitted, setHasSubmitted] = useState(false); // ← нове
+  const [hasSubmitted, setHasSubmitted] = useState(false);
 
   const resetResults = () => {
     setMatches(null);
@@ -41,17 +41,16 @@ export default function Search({ goToMatch, editor, isLoaded }) {
     setError(null);
   };
 
-  // Ініціалізація з URL (вважаємо як сабмітований пошук)
+
   useEffect(() => {
     setQueryInput(query);
-    if (query.trim() && isLoaded) {
+    if (query.trim() && isLoaded && fullDoc) {
       setHasSubmitted(true);
       handleSearch(query);
       setOpen(true);
     }
-  }, [query, isLoaded]);
+  }, [query, isLoaded, fullDoc]);
 
-  // Автоперехід до поточного збігу
   useEffect(() => {
     if (count > 0 && matches?.[cursor] && editor) {
       goToMatch(matches[cursor]);
@@ -62,7 +61,7 @@ export default function Search({ goToMatch, editor, isLoaded }) {
     const results = [];
     const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(safe, "gi");
-    (doc.content || []).forEach((block, blockIndex) => {
+    (doc?.content || []).forEach((block, blockIndex) => {
       if (!block?.content) return;
       block.content.forEach((child, childIndex) => {
         if (child?.text) {
@@ -83,14 +82,14 @@ export default function Search({ goToMatch, editor, isLoaded }) {
 
   const handleSearch = async (searchQuery) => {
     const q = searchQuery.trim();
-    if (!q) return;
+    if (!q || !editor || !fullDoc) return; // ← обовʼязково є fullDoc!
 
     setLoading(true);
     setError(null);
     setBooksMatches([]);
 
     try {
-      // Підсумки по всіх книгах
+      // підсумки по всіх книгах (без змін)
       const toc = await (await fetch("/api/content/toc")).json();
       let globalTotal = 0;
       const list = [];
@@ -118,8 +117,7 @@ export default function Search({ goToMatch, editor, isLoaded }) {
       setBooksMatches(list);
       setTotalCount(globalTotal);
 
-      if (!editor) throw new Error("Editor not ready");
-      const fullDoc = editor.getJSON();
+      // ГОЛОВНЕ: шукаємо в усьому документі поточної книги
       const localMatches = searchInDocument(fullDoc, q);
       const localCount = localMatches.length;
 
@@ -142,7 +140,7 @@ export default function Search({ goToMatch, editor, isLoaded }) {
 
   const applySearch = () => {
     const trimmed = (queryInput || "").trim();
-    setHasSubmitted(!!trimmed); // показуємо результати/помилки лише після сабміту
+    setHasSubmitted(!!trimmed);
     const params = new URLSearchParams(searchParams);
     if (trimmed) params.set("query", trimmed);
     else params.delete("query");
@@ -186,11 +184,9 @@ export default function Search({ goToMatch, editor, isLoaded }) {
     const q = e.target.value;
     setQueryInput(q);
 
-    // Поки користувач набирає — нічого не показуємо
     resetResults();
     setHasSubmitted(false);
 
-    // Оновлення URL без навігації
     const url = new URL(window.location.href);
     const trimmed = q.trim();
     if (trimmed.length === 0) url.searchParams.delete("query");
@@ -255,7 +251,6 @@ export default function Search({ goToMatch, editor, isLoaded }) {
 
           {loading && <CircularProgress size={24} />}
 
-          {/* Показуємо статистику/результати тільки після сабміту */}
           {!loading && hasQuery && hasSubmitted && (
             <Box sx={{ mb: 2 }}>
               <Typography variant="body2">
@@ -303,7 +298,6 @@ export default function Search({ goToMatch, editor, isLoaded }) {
             </>
           )}
 
-          {/* Помилку показуємо лише після сабміту і завершення завантаження */}
           {hasQuery && hasSubmitted && !loading && (error || count === 0) && (
             <Typography variant="body2" color="error" sx={{ mt: 2 }}>
               {error || "Ничего не найдено."}
