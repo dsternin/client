@@ -251,6 +251,8 @@ export default function Reader() {
     }
 
     if (!isLoaded || (!initialSection && !initialPoint)) return;
+    setStart(NaN);
+    setEnd(NaN);
     triggerHighlight();
     const targetId = initialPoint || initialSection;
     if (isReadyToScroll) {
