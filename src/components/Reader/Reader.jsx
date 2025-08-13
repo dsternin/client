@@ -131,6 +131,7 @@ export default function Reader() {
   function highlight(start, end) {
     setEnd(end);
     setStart(start);
+    setTrigger((prev) => !prev);
   }
 
   function goToPage(page) {

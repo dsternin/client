@@ -45,7 +45,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const [count, setCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [booksMatches, setBooksMatches] = useState([]);
-  const [cursor, setCursor] = useState(0);
+  const [cursor, setCursor] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -57,7 +57,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     setCount(0);
     setTotalCount(0);
     setBooksMatches([]);
-    setCursor(0);
+    setCursor(-1);
     setError(null);
   };
 
@@ -71,10 +71,10 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   }, [query, isLoaded, fullDoc]);
 
   useEffect(() => {
-    if (count > 0 && matches?.[cursor] && editor) {
+    if (open && count > 0 && matches?.[cursor] && editor) {
       goToMatch(matches[cursor]);
     }
-  }, [cursor, matches, count, editor]);
+  }, [cursor, matches, count, editor, open]);
 
   const searchInDocument = (doc, q) => {
     const results = [];
@@ -204,6 +204,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   };
 
   const applySearch = () => {
+    setOpen(true);
     const trimmed = (queryInput || "").trim();
     setHasSubmitted(!!trimmed);
     const params = new URLSearchParams(searchParams);
@@ -231,9 +232,15 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     setHasSubmitted(false);
   };
 
+  useEffect(() => {
+    if (!open) {
+      editor?.commands.unsetSearchHighlight();
+      setCursor(-1);
+    }
+  }, [open]);
+
   const handleClose = () => {
     setOpen(false);
-    editor?.commands.unsetSearchHighlight();
     setQueryInput("");
     resetResults();
     setHasSubmitted(false);
