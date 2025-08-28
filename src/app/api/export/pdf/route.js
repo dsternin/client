@@ -9,17 +9,16 @@ export async function POST(req) {
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "load", timeout: 60000 });
+    await page.setContent(html, {
+      waitUntil: "load",
+      timeout: 0,
+    });
 
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: {
-        top: "40px",
-        bottom: "60px",
-        left: "40px",
-        right: "40px",
-      },
+      timeout: 0,
+      margin: { top: "40px", bottom: "60px", left: "40px", right: "40px" },
     });
 
     await browser.close();
