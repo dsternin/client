@@ -8,11 +8,14 @@ export async function POST(req) {
       headless: "new",
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
+    console.log("saving");
+
     const page = await browser.newPage();
     await page.setContent(html, {
       waitUntil: "load",
       timeout: 0,
     });
+    console.log("newPage");
 
     const pdfBuffer = await page.pdf({
       format: "A4",
@@ -20,6 +23,7 @@ export async function POST(req) {
       timeout: 0,
       margin: { top: "40px", bottom: "60px", left: "40px", right: "40px" },
     });
+    console.log("pdf");
 
     await browser.close();
 
