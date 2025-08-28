@@ -298,7 +298,7 @@ export default function TipTapButtons({ editor, save }) {
       <Button variant="contained" onClick={handleExport} color="success">
         Сохранить
       </Button>
-      <Button variant="outlined" onClick={handleExportToPDF}>
+      <Button variant="contained" onClick={handleExportToPDF}>
         Экспорт в PDF
       </Button>
     </Box>
