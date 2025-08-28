@@ -6,11 +6,120 @@ import TextBoxControls from "../extensions/TextBoxControl";
 import { rainbowColors } from "@/lib/colors";
 import { useState } from "react";
 import ChapterLinkDialog from "@/components/ChapterLinkDialog";
+import { generateHTML } from "@tiptap/html";
+import getEditorExtensions from "@/lib/tiptapExtensions";
+import { useBookContext } from "@/store/BookContext";
 
 export default function TipTapButtons({ editor, save }) {
+  const { bookLabel } = useBookContext();
+
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const handleExport = () => {
     save();
+  };
+
+  const handleExportToPDF = async () => {
+    if (!editor) return;
+
+    const htmlContent = generateHTML(editor.getJSON(), getEditorExtensions());
+
+    const html = `
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body {
+  font-size: 30px;
+  height: 100%;
+  margin: 0;
+  padding: 16px;
+  font-family: "Georgia", serif;
+  color: #1a1a1a;
+  overflow-x: hidden;
+}
+
+.content {
+  flex: 1;
+}
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 95vh;
+}
+
+.ProseMirror {
+  font-size: 30px;
+  line-height: 1.6;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  min-height: 300px;
+  outline: none;
+}
+
+.ProseMirror p {
+  margin: 0.5em 0;
+  text-indent: 2em;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+  line-height: 1.7;
+}
+
+.ProseMirror p.no-indent {
+  text-indent: 0;
+}
+
+.ProseMirror h1 {
+  font-size: 3.5rem;
+  margin: 1.2em 0 0.6em;
+}
+
+.ProseMirror h2 {
+  font-size: 3rem;
+  margin: 1.1em 0 0.5em;
+}
+
+.text-box {
+  border: 5px solid;
+  padding: 10px;
+}
+
+.search-highlight {
+  background-color: aqua;
+}
+
+.stickyHeaderWrapper {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  width: 100%;
+  background-color: rgba(248, 244, 239, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+        </style>
+      </head>
+      <body>${htmlContent}</body>
+    </html>
+  `;
+    const res = await fetch("/api/export/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, filename: bookLabel }),
+    });
+
+    if (!res.ok) {
+      alert("Помилка експорту PDF");
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${bookLabel}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const insertImage = async () => {
@@ -34,7 +143,12 @@ export default function TipTapButtons({ editor, save }) {
         const data = await res.json();
 
         if (data.url) {
-          editor?.chain().focus().setImage({ src: data.url }).run();
+          console.log(`${location.origin}${data.url}`);
+          editor
+            ?.chain()
+            .focus()
+            .setImage({ src: `${location.origin}${data.url}` })
+            .run();
         } else {
           alert("Ошибка загрузки изображения");
         }
@@ -183,6 +297,9 @@ export default function TipTapButtons({ editor, save }) {
       )}
       <Button variant="contained" onClick={handleExport} color="success">
         Сохранить
+      </Button>
+      <Button variant="outlined" onClick={handleExportToPDF}>
+        Экспорт в PDF
       </Button>
     </Box>
   );

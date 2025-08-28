@@ -18,46 +18,63 @@ const CustomImage = Image.extend({
         default: 300,
         parseHTML: (element) =>
           parseInt(element.getAttribute("data-width")) || 300,
-        renderHTML: (attributes) => ({
-          "data-width": attributes.width,
+        renderHTML: (attrs) => ({
+          "data-width": attrs.width,
         }),
       },
       height: {
         default: 200,
         parseHTML: (element) =>
           parseInt(element.getAttribute("data-height")) || 200,
-        renderHTML: (attributes) => ({
-          "data-height": attributes.height,
+        renderHTML: (attrs) => ({
+          "data-height": attrs.height,
         }),
       },
       alignment: {
-        default: "center", // 'left', 'right', or 'center'
+        default: "center",
         parseHTML: (element) => element.getAttribute("data-align") || "center",
-        renderHTML: (attributes) => ({
-          "data-align": attributes.alignment,
+        renderHTML: (attrs) => ({
+          "data-align": attrs.alignment,
         }),
       },
+      style: {
+        renderHTML: (attrs) => {
+          const width = parseInt(attrs.width) || 300;
+          const height = parseInt(attrs.height) || 200;
+          const alignment = attrs.alignment || "center";
+
+          const styleParts = [
+            `width: ${width}px`,
+            `height: ${height}px`,
+            `object-fit: contain`,
+          ];
+
+          if (alignment === "left") {
+            styleParts.push(
+              "float: left",
+              "margin: 0 1em 1em 0",
+              "display: inline"
+            );
+          } else if (alignment === "right") {
+            styleParts.push(
+              "float: right",
+              "margin: 0 0 1em 1em",
+              "display: inline"
+            );
+          } else {
+            styleParts.push(
+              "display: block",
+              "margin: 1em auto",
+              "float: none"
+            );
+          }
+
+          return {
+            style: styleParts.join("; "),
+          };
+        },
+      },
     };
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    const { width, height, alignment = "center", ...rest } = HTMLAttributes;
-
-    const styleParts = [
-      `width: ${width}px`,
-      `height: ${height}px`,
-      `object-fit: contain`,
-    ];
-
-    if (alignment === "left") {
-      styleParts.push("float: left", "margin: 0 1em 1em 0", "display: inline");
-    } else if (alignment === "right") {
-      styleParts.push("float: right", "margin: 0 0 1em 1em", "display: inline");
-    } else if (alignment === "center") {
-      styleParts.push("display: block", "margin: 1em auto", "float: none");
-    }
-
-    return ["img", { ...rest, style: styleParts.join("; ") }];
   },
 
   addNodeView() {
