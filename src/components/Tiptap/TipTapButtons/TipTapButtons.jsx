@@ -9,11 +9,13 @@ import ChapterLinkDialog from "@/components/ChapterLinkDialog";
 import { generateHTML } from "@tiptap/html";
 import getEditorExtensions from "@/lib/tiptapExtensions";
 import { useBookContext } from "@/store/BookContext";
+import { useRouter } from "next/navigation";
 
 export default function TipTapButtons({ editor, save }) {
   const { bookLabel } = useBookContext();
-
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const router = useRouter();
+
   const handleExport = () => {
     save();
   };
@@ -22,90 +24,79 @@ export default function TipTapButtons({ editor, save }) {
     if (!editor) return;
 
     const htmlContent = generateHTML(editor.getJSON(), getEditorExtensions());
-
     const html = `
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          body {
-  font-size: 30px;
-  height: 100%;
-  margin: 0;
-  padding: 16px;
-  font-family: "Georgia", serif;
-  color: #1a1a1a;
-  overflow-x: hidden;
-}
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body {
+              font-size: 30px;
+              height: 100%;
+              margin: 0;
+              padding: 16px;
+              font-family: "Georgia", serif;
+              color: #1a1a1a;
+              overflow-x: hidden;
+            }
+            .content { flex: 1; }
+            .layout {
+              display: flex;
+              flex-direction: column;
+              min-height: 95vh;
+            }
+            .ProseMirror {
+              font-size: 30px;
+              line-height: 1.6;
+              padding: 1rem;
+              border-radius: 0.5rem;
+              min-height: 300px;
+              outline: none;
+            }
+            .ProseMirror p {
+              margin: 0.5em 0;
+              text-indent: 2em;
+              margin-top: 0.75em;
+              margin-bottom: 0.75em;
+              line-height: 1.7;
+            }
+            .ProseMirror p.no-indent { text-indent: 0; }
+            .ProseMirror h1 {
+              font-size: 3.5rem;
+              margin: 1.2em 0 0.6em;
+            }
+            .ProseMirror h2 {
+              font-size: 3rem;
+              margin: 1.1em 0 0.5em;
+            }
+            .text-box {
+              border: 5px solid;
+              padding: 10px;
+            }
+            .search-highlight { background-color: aqua; }
+            .stickyHeaderWrapper {
+              position: sticky;
+              top: 0;
+              z-index: 1000;
+              width: 100%;
+              background-color: rgba(248, 244, 239, 0.75);
+              backdrop-filter: blur(4px);
+            }
+          </style>
+        </head>
+        <body><div>${htmlContent}</div></body>
+      </html>
+    `;
 
-.content {
-  flex: 1;
-}
+    const shortName = bookLabel?.split(" ")[0]?.trim();
+    if (!shortName) {
+      alert("Некоректна назва книги");
+      return;
+    }
 
-.layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 95vh;
-}
-
-.ProseMirror {
-  font-size: 30px;
-  line-height: 1.6;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  min-height: 300px;
-  outline: none;
-}
-
-.ProseMirror p {
-  margin: 0.5em 0;
-  text-indent: 2em;
-  margin-top: 0.75em;
-  margin-bottom: 0.75em;
-  line-height: 1.7;
-}
-
-.ProseMirror p.no-indent {
-  text-indent: 0;
-}
-
-.ProseMirror h1 {
-  font-size: 3.5rem;
-  margin: 1.2em 0 0.6em;
-}
-
-.ProseMirror h2 {
-  font-size: 3rem;
-  margin: 1.1em 0 0.5em;
-}
-
-.text-box {
-  border: 5px solid;
-  padding: 10px;
-}
-
-.search-highlight {
-  background-color: aqua;
-}
-
-.stickyHeaderWrapper {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  width: 100%;
-  background-color: rgba(248, 244, 239, 0.75);
-  backdrop-filter: blur(4px);
-}
-
-        </style>
-      </head>
-      <body>${htmlContent}</body>
-    </html>
-  `;
     const res = await fetch("/api/export/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html, filename: bookLabel }),
+      body: JSON.stringify({ html, filename: shortName }),
     });
 
     if (!res.ok) {
@@ -113,13 +104,7 @@ export default function TipTapButtons({ editor, save }) {
       return;
     }
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${bookLabel}.pdf`;
-    link.click();
-    URL.revokeObjectURL(url);
+    window.open(`/pdf?name=${encodeURIComponent(shortName)}`, "_blank");
   };
 
   const insertImage = async () => {
@@ -143,7 +128,6 @@ export default function TipTapButtons({ editor, save }) {
         const data = await res.json();
 
         if (data.url) {
-          console.log(`${location.origin}${data.url}`);
           editor
             ?.chain()
             .focus()
@@ -171,7 +155,6 @@ export default function TipTapButtons({ editor, save }) {
         flexWrap: "wrap",
         gap: 1,
         position: "sticky",
-        // "background-color": "rgba(248, 244, 239, 0.75)",
         backdropFilter: "blur(4px)",
       }}
     >
@@ -196,26 +179,9 @@ export default function TipTapButtons({ editor, save }) {
             editor?.chain().focus().toggleHeading({ level: 3 }).run(),
         }}
       />
-
       <Button color="primary" variant="contained" onClick={insertImage}>
         Вставить картинку
       </Button>
-      {/* <Button
-        variant="contained"
-        color="primary"
-        onClick={() => {
-          const current = editor?.getAttributes("paragraph").class || "";
-          const next = current.includes("no-indent") ? "" : "no-indent";
-          editor
-            ?.chain()
-            .focus()
-            .updateAttributes("paragraph", { class: next })
-            .run();
-        }}
-      >
-        Без отступа
-      </Button> */}
-
       <MenuButton
         label="Выравнивание"
         items={{
@@ -226,7 +192,6 @@ export default function TipTapButtons({ editor, save }) {
         }}
         buttonProps={{ color: "primary" }}
       />
-
       <MenuButton
         label="Цвет текста"
         items={Object.fromEntries([
