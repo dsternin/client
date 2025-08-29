@@ -28,7 +28,8 @@
     "mongodb": "^6.18.0",
     "mongoose": "^8.15.1",
     "next": "15.3.3",
-    "puppeteer": "^24.17.0",
+    "pdf-merger-js": "^5.1.2",
+    "puppeteer": "^24.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-resizable": "^3.0.5"
