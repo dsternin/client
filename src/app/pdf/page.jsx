@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { Button } from "@mui/material";
 
 export default function PDFStatusPage() {
   const searchParams = useSearchParams();
@@ -21,7 +22,7 @@ export default function PDFStatusPage() {
 
     const checkOldVersion = async () => {
       try {
-        const res = await fetch(`/pdfs/${filename}.old.pdf`, {
+        const res = await fetch(`/api/pdf/${filename}?old=1`, {
           method: "HEAD",
         });
         if (res.ok) setOldAvailable(true);
@@ -34,11 +35,11 @@ export default function PDFStatusPage() {
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/pdfs/${filename}.pdf`, { method: "HEAD" });
+        const res = await fetch(`/api/pdf/${filename}`, { method: "HEAD" });
         if (res.ok) {
           clearInterval(interval);
           setStatus("Готово! Скачивание начнётся...");
-          router.replace(`/pdfs/${filename}.pdf`);
+          router.replace(`/api/pdf/${filename}`);
         }
       } catch (err) {
         console.error("Ошибка при проверке PDF:", err);
@@ -54,16 +55,16 @@ export default function PDFStatusPage() {
       .split(/\s+/)[0]
       .replace(/[\/\\?%*:|"<>]/g, "_");
 
-    router.replace(`/pdfs/${filename}.old.pdf`);
+    router.replace(`/api/pdf/${filename}?old=1`);
   };
 
   return (
     <main style={{ padding: "2rem", fontSize: "1.5rem" }}>
       <div>{status}</div>
       {oldAvailable && (
-        <div style={{ marginTop: "1rem" }}>
-          <button onClick={handleOpenOld}>Открыть предыдущую версию</button>
-        </div>
+        <Button variant="contained" onClick={handleOpenOld}>
+          Открыть предыдущую версию
+        </Button>
       )}
     </main>
   );
