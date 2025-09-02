@@ -8,10 +8,12 @@ import {
   Box,
   CircularProgress,
   IconButton,
+  colors,
 } from "@mui/material";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close";
+import RedButton from "../RedButton";
 
 const CACHE_MAX = 12;
 const searchCache = new Map();
@@ -311,6 +313,12 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
               onChange={handleChange}
               fullWidth
               size="small"
+              InputLabelProps={{
+                sx: {
+                  color: "#b81414",
+                  fontWeight: 600,
+                },
+              }}
             />
             <Button
               variant="contained"
@@ -330,14 +338,13 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
               </Typography>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
                 {booksMatches.map((b) => (
-                  <Button
+                  <RedButton
                     key={b.name}
-                    variant={b.name === book ? "contained" : "outlined"}
-                    size="small"
-                    onClick={() => goToBook(b.name)}
-                  >
-                    {b.label}: {b.count}
-                  </Button>
+                    fullWidth={false}
+                    clickHandler={() => goToBook(b.name)}
+                    label={`${b.label}: ${b.count}`}
+                    active={b.name === book}
+                  />
                 ))}
               </Box>
             </Box>
@@ -352,20 +359,18 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
                 Текущий результат: {cursor + 1} из {count}.
               </Typography>
               <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  onClick={() => setCursor((p) => Math.max(p - 1, 0))}
-                >
-                  Назад
-                </Button>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  onClick={() => setCursor((p) => Math.min(p + 1, count - 1))}
-                >
-                  Далее
-                </Button>
+                <RedButton
+                  fullWidth={true}
+                  clickHandler={() => setCursor((p) => Math.max(p - 1, 0))}
+                  label="Назад"
+                />
+                <RedButton
+                  fullWidth={true}
+                  clickHandler={() =>
+                    setCursor((p) => Math.min(p + 1, count - 1))
+                  }
+                  label="Далее"
+                />
               </Box>
             </>
           )}
