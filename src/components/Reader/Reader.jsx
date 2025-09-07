@@ -5,14 +5,16 @@ import { EditorContent } from "@tiptap/react";
 import { useEffect, useState, useRef } from "react";
 import Search from "../Search";
 import { CircularProgress, Box, Button, Typography } from "@mui/material";
+import SearchIcon from "@mui/icons-material/Search";
 import { useBookContext } from "@/store/BookContext";
 import TipTapButtons from "../Tiptap/TipTapButtons";
 import MenuButton from "../MenuButtons";
 import useNearestHeadings from "@/hooks/useNearestHeadings";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 export default function Reader() {
   const router = useRouter();
+  const pathname = usePathname();
   const containerRef = useRef(null);
 
   const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
@@ -56,6 +58,26 @@ export default function Reader() {
 
   function triggerHighlight() {
     setTrigger((prev) => !prev);
+  }
+
+  function getSelectedText() {
+    if (!editor) return "";
+    const { from, to } = editor.state.selection;
+    return editor.state.doc.textBetween(from, to, " ").trim();
+  }
+  function openSearchUnified() {
+    const selected = getSelectedText();
+    const params = new URLSearchParams(searchParams);
+    params.delete("section");
+    params.delete("point");
+    if (selected) {
+      params.set("query", selected);
+      params.delete("openSearch");
+    } else {
+      params.delete("query");
+      params.set("openSearch", "1");
+    }
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   async function save() {
@@ -414,6 +436,16 @@ export default function Reader() {
               renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
             />
           </Box>
+          {isLoaded && !edit && (
+            <Button
+              variant="contained"
+              startIcon={<SearchIcon />}
+              onClick={openSearchUnified}
+              sx={{ position: "fixed", bottom: 16, right: 16, zIndex: 1000 }}
+            >
+              Поиск текста по книгам
+            </Button>
+          )}
         </>
       )}
     </>

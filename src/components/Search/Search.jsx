@@ -40,6 +40,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
 
   const book = searchParams.get("book");
   const query = searchParams.get("query") || "";
+  const openFlag = searchParams.get("openSearch");
 
   const [open, setOpen] = useState(false);
   const [queryInput, setQueryInput] = useState("");
@@ -53,6 +54,15 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
   const abortRef = useRef(null);
+
+  const collapseSelection = () => {
+    try {
+      const to = editor?.state?.selection?.to;
+      if (typeof to === "number") {
+        editor.commands.setTextSelection({ from: to, to });
+      }
+    } catch {}
+  };
 
   const resetResults = () => {
     setMatches(null);
@@ -69,8 +79,17 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
       setHasSubmitted(true);
       handleSearch(query);
       setOpen(true);
+      collapseSelection();
     }
   }, [query, isLoaded, fullDoc]);
+
+  useEffect(() => {
+    if (openFlag && isLoaded && fullDoc) {
+      setOpen(true);
+      setHasSubmitted(false);
+      collapseSelection();
+    }
+  }, [openFlag, isLoaded, fullDoc]);
 
   useEffect(() => {
     if (open && count > 0 && matches?.[cursor] && editor) {
@@ -212,6 +231,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     const params = new URLSearchParams(searchParams);
     if (trimmed) params.set("query", trimmed);
     else params.delete("query");
+    params.delete("openSearch");
     const qs = params.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
@@ -225,13 +245,6 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     params.delete("section");
     setHasSubmitted(!!trimmed);
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
-  };
-
-  const handleOpen = () => {
-    setOpen(true);
-    resetResults();
-    setError(null);
-    setHasSubmitted(false);
   };
 
   useEffect(() => {
@@ -249,6 +262,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
 
     const params = new URLSearchParams(searchParams);
     params.delete("query");
+    params.delete("openSearch");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
@@ -274,23 +288,12 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
 
   return (
     <>
-      {!open && (
-        <Button
-          variant="contained"
-          startIcon={<SearchIcon />}
-          onClick={handleOpen}
-          sx={{ position: "fixed", bottom: 16, right: 16, zIndex: 1000 }}
-        >
-          Искать по книгам
-        </Button>
-      )}
-
       {open && (
         <Box
           sx={{
             position: "fixed",
             bottom: 16,
-            right: 16,
+            right: "20%",
             width: 500,
             p: 2,
             bgcolor: "background.paper",
@@ -332,46 +335,47 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
           {loading && <CircularProgress size={24} />}
 
           {!loading && hasQuery && hasSubmitted && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2">
-                Всего совпадений во всех книгах: {totalCount}.
-              </Typography>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
-                {booksMatches.map((b) => (
-                  <RedButton
-                    key={b.name}
-                    fullWidth={false}
-                    clickHandler={() => goToBook(b.name)}
-                    label={`${b.label}: ${b.count}`}
-                    active={b.name === book}
-                  />
-                ))}
-              </Box>
-            </Box>
-          )}
-
-          {hasQuery && hasSubmitted && count > 0 && (
             <>
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                Текущая книга: {currentLabel}, совпадений в ней: {count}.
-              </Typography>
-              <Typography variant="body2">
-                Текущий результат: {cursor + 1} из {count}.
-              </Typography>
-              <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
-                <RedButton
-                  fullWidth={true}
-                  clickHandler={() => setCursor((p) => Math.max(p - 1, 0))}
-                  label="Назад"
-                />
-                <RedButton
-                  fullWidth={true}
-                  clickHandler={() =>
-                    setCursor((p) => Math.min(p + 1, count - 1))
-                  }
-                  label="Далее"
-                />
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  Всего совпадений во всех книгах: {totalCount}.
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
+                  {booksMatches.map((b) => (
+                    <RedButton
+                      key={b.name}
+                      fullWidth={false}
+                      clickHandler={() => goToBook(b.name)}
+                      label={`${b.label}: ${b.count}`}
+                      active={b.name === book}
+                    />
+                  ))}
+                </Box>
               </Box>
+              {hasQuery && hasSubmitted && count > 0 && (
+                <>
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Текущая книга: {currentLabel}, совпадений в ней: {count}.
+                  </Typography>
+                  <Typography variant="body2">
+                    Текущий результат: {cursor + 1} из {count}.
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+                    <RedButton
+                      fullWidth={true}
+                      clickHandler={() => setCursor((p) => Math.max(p - 1, 0))}
+                      label="Назад"
+                    />
+                    <RedButton
+                      fullWidth={true}
+                      clickHandler={() =>
+                        setCursor((p) => Math.min(p + 1, count - 1))
+                      }
+                      label="Далее"
+                    />
+                  </Box>
+                </>
+              )}
             </>
           )}
 
