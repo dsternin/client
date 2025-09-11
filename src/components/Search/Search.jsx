@@ -316,7 +316,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
               onChange={handleChange}
               fullWidth
               size="small"
-              autocomplete="new-password"
+              autoComplete="off"
               InputLabelProps={{
                 sx: {
                   color: "#b81414",
