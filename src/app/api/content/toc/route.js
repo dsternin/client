@@ -10,15 +10,15 @@ export async function GET() {
   try {
     await dbConnect();
 
-    const books = await Book.find({});
+    const books = await Book.find({}).sort({ createdAt: 1 });
     const result = [];
-
     for (const book of books) {
       console.log("start chapters");
       console.log(book.name);
 
       const chapters = await getBookChaptersWithTitles(book);
       console.log("end chapters");
+
       result.push({
         name: book.name,
         label: book.label,
