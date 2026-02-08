@@ -14,24 +14,22 @@ import BookInfoPanel from "@/components/BookInfoPanel";
 
 import { Suspense, useEffect } from "react";
 import Script from "next/script";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 function GATrackPageView() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (!GA_ID) return;
+    if (typeof window === "undefined") return;
+    if (typeof window.gtag !== "function") return;
 
-    const query = searchParams?.toString();
-    const url = pathname + (query ? `?${query}` : "");
+    const url = pathname + (window.location.search || "");
 
-    if (typeof window !== "undefined" && typeof window.gtag === "function") {
-      window.gtag("config", GA_ID, { page_path: url });
-    }
-  }, [pathname, searchParams]);
+    window.gtag("config", GA_ID, { page_path: url });
+  }, [pathname]);
 
   return null;
 }
@@ -60,20 +58,17 @@ export default function RootLayout({ children }) {
       </head>
 
       <body className="layout">
-        {/* page_view on route change */}
         <GATrackPageView />
 
         <AuthProvider>
           <Suspense fallback={null}>
             <BookContextProvider>
               <ThemeProvider theme={theme}>
-                {/* <CssBaseline /> */}
                 <div className="stickyHeaderWrapper">
                   <Header />
                   <BookInfoPanel />
                 </div>
 
-                {/* <AdminPanel /> */}
                 <main className="content">{children}</main>
                 <Footer />
               </ThemeProvider>
@@ -84,3 +79,4 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
+і;
