@@ -1,7 +1,18 @@
 "use client";
 
 import MenuButton from "@/components/MenuButtons";
-import { Box, Button } from "@mui/material";
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  List,
+  ListItemButton,
+  ListItemText,
+  Typography,
+} from "@mui/material";
 import TextBoxControls from "../extensions/TextBoxControl";
 import { rainbowColors } from "@/lib/colors";
 import { useState } from "react";
@@ -9,12 +20,87 @@ import ChapterLinkDialog from "@/components/ChapterLinkDialog";
 import { generateHTML } from "@tiptap/html";
 import getEditorExtensions from "@/lib/tiptapExtensions";
 import { useBookContext } from "@/store/BookContext";
-import { useRouter } from "next/navigation";
 
-export default function TipTapButtons({ editor, save }) {
+function AnchorLinkDialog({ open, anchors, loading, onClose, onInsert }) {
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Выберите якорь</DialogTitle>
+
+      <DialogContent dividers>
+        {loading ? (
+          <Typography>Загрузка якорей...</Typography>
+        ) : !anchors.length ? (
+          <Typography>В книге пока нет сохранённых якорей</Typography>
+        ) : (
+          <List>
+            {anchors.map((anchor) => (
+              <ListItemButton
+                key={`${anchor.section}_${anchor.id}`}
+                onClick={() => onInsert(anchor)}
+              >
+                <ListItemText
+                  primary={anchor.text}
+                  secondary={`${anchor.section} · #${anchor.id}`}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+      </DialogContent>
+
+      <DialogActions>
+        <Button onClick={onClose}>Закрыть</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+export default function TipTapButtons({ editor, save, section }) {
   const { bookLabel } = useBookContext();
+
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const router = useRouter();
+
+  const [anchorDialogOpen, setAnchorDialogOpen] = useState(false);
+  const [anchors, setAnchors] = useState([]);
+  const [anchorsLoading, setAnchorsLoading] = useState(false);
+
+  const createAnchor = () => {
+    if (!editor) return;
+
+    const { from, to } = editor.state.selection;
+    if (from === to) {
+      alert("Сначала выделите текст, на который нужно поставить якорь");
+      return;
+    }
+
+    editor.chain().focus().setAnchor().run();
+  };
+
+  // const removeAnchor = () => {
+  //   editor?.chain().focus().unsetAnchor().run();
+  // };
+
+  const openAnchorLinkDialog = async () => {
+    setAnchorsLoading(true);
+    setAnchorDialogOpen(true);
+
+    const res = await fetch("/api/anchors");
+    const data = await res.json();
+
+    setAnchors(data.anchors || []);
+    setAnchorsLoading(false);
+  };
+
+  const insertAnchorLink = (anchor) => {
+    editor
+      ?.chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href: anchor.href })
+      .run();
+
+    setAnchorDialogOpen(false);
+  };
 
   const handleExport = () => {
     save();
@@ -146,126 +232,158 @@ export default function TipTapButtons({ editor, save }) {
   };
 
   return (
-    <Box
-      sx={{
-        zIndex: 1000,
-        top: "10.5rem",
-        mb: 2,
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 1,
-        position: "sticky",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <MenuButton
-        label="Стиль текста"
-        items={{
-          Жирный: () => editor?.chain().focus().toggleBold().run(),
-          Курсив: () => editor?.chain().focus().toggleItalic().run(),
-          Подчёркнутый: () => editor?.chain().focus().toggleUnderline().run(),
+    <>
+      <Box
+        sx={{
+          zIndex: 1000,
+          top: "10.5rem",
+          mb: 2,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 1,
+          position: "sticky",
+          backdropFilter: "blur(4px)",
         }}
-      />
-      <MenuButton
-        label="Заголовок"
-        items={{
-          "Без заголовка": () =>
-            editor?.chain().focus().setNode("paragraph").run(),
-          "Заголовок H1": () =>
-            editor?.chain().focus().toggleHeading({ level: 1 }).run(),
-          "Заголовок H2": () =>
-            editor?.chain().focus().toggleHeading({ level: 2 }).run(),
-          "Заголовок H3": () =>
-            editor?.chain().focus().toggleHeading({ level: 3 }).run(),
-        }}
-      />
-      <Button color="primary" variant="contained" onClick={insertImage}>
-        Вставить картинку
-      </Button>
-      <MenuButton
-        label="Выравнивание"
-        items={{
-          Влево: () => editor?.chain().focus().setTextAlign("left").run(),
-          "По центру": () =>
-            editor?.chain().focus().setTextAlign("center").run(),
-          Вправо: () => editor?.chain().focus().setTextAlign("right").run(),
-        }}
-        buttonProps={{ color: "primary" }}
-      />
-      <MenuButton
-        label="Цвет текста"
-        items={Object.fromEntries([
-          ["По умолчанию", () => editor?.chain().focus().unsetColor().run()],
-          ...rainbowColors.map((color) => [
-            color,
-            () => editor?.chain().focus().setColor(color).run(),
-          ]),
-        ])}
-        buttonProps={{ color: "primary" }}
-        renderOption={(color) =>
-          color === "По умолчанию" ? (
-            <div style={{ padding: 8 }}>По умолчанию</div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", padding: 8 }}>
-              <Box
-                sx={{
-                  backgroundColor: color,
-                  width: 30,
-                  height: 30,
-                  borderRadius: "4px",
-                  border: "1px solid #ccc",
-                  cursor: "pointer",
-                }}
-              />
-            </div>
-          )
-        }
-      />
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={() => setLinkDialogOpen(true)}
       >
-        Добавить ссылку на главу книги
-      </Button>
-      <ChapterLinkDialog
-        open={linkDialogOpen}
-        onClose={() => setLinkDialogOpen(false)}
-        onInsert={(url) => {
-          editor
-            ?.chain()
-            .focus()
-            .extendMarkRange("link")
-            .setLink({ href: url })
-            .run();
-        }}
+        <MenuButton
+          label="Стиль текста"
+          items={{
+            Жирный: () => editor?.chain().focus().toggleBold().run(),
+            Курсив: () => editor?.chain().focus().toggleItalic().run(),
+            Подчёркнутый: () => editor?.chain().focus().toggleUnderline().run(),
+          }}
+        />
+
+        <MenuButton
+          label="Заголовок"
+          items={{
+            "Без заголовка": () =>
+              editor?.chain().focus().setNode("paragraph").run(),
+            "Заголовок H1": () =>
+              editor?.chain().focus().toggleHeading({ level: 1 }).run(),
+            "Заголовок H2": () =>
+              editor?.chain().focus().toggleHeading({ level: 2 }).run(),
+            "Заголовок H3": () =>
+              editor?.chain().focus().toggleHeading({ level: 3 }).run(),
+          }}
+        />
+
+        <Button color="primary" variant="contained" onClick={insertImage}>
+          Вставить картинку
+        </Button>
+
+        <MenuButton
+          label="Выравнивание"
+          items={{
+            Влево: () => editor?.chain().focus().setTextAlign("left").run(),
+            "По центру": () =>
+              editor?.chain().focus().setTextAlign("center").run(),
+            Вправо: () => editor?.chain().focus().setTextAlign("right").run(),
+          }}
+          buttonProps={{ color: "primary" }}
+        />
+
+        <MenuButton
+          label="Цвет текста"
+          items={Object.fromEntries([
+            ["По умолчанию", () => editor?.chain().focus().unsetColor().run()],
+            ...rainbowColors.map((color) => [
+              color,
+              () => editor?.chain().focus().setColor(color).run(),
+            ]),
+          ])}
+          buttonProps={{ color: "primary" }}
+          renderOption={(color) =>
+            color === "По умолчанию" ? (
+              <div style={{ padding: 8 }}>По умолчанию</div>
+            ) : (
+              <div
+                style={{ display: "flex", alignItems: "center", padding: 8 }}
+              >
+                <Box
+                  sx={{
+                    backgroundColor: color,
+                    width: 30,
+                    height: 30,
+                    borderRadius: "4px",
+                    border: "1px solid #ccc",
+                    cursor: "pointer",
+                  }}
+                />
+              </div>
+            )
+          }
+        />
+
+        <MenuButton
+          label="Якоря"
+          items={{
+            "Создать якорь": createAnchor,
+            // "Удалить якорь": removeAnchor,
+            "Ссылка на якорь": openAnchorLinkDialog,
+          }}
+          buttonProps={{ color: "primary" }}
+        />
+
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => setLinkDialogOpen(true)}
+        >
+          Добавить ссылку на главу книги
+        </Button>
+
+        <ChapterLinkDialog
+          open={linkDialogOpen}
+          onClose={() => setLinkDialogOpen(false)}
+          onInsert={(url) => {
+            editor
+              ?.chain()
+              .focus()
+              .extendMarkRange("link")
+              .setLink({ href: url })
+              .run();
+          }}
+        />
+
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() =>
+            editor
+              ?.chain()
+              .focus()
+              .wrapIn("textBox", {
+                backgroundColor: "#f9f9f9",
+                borderColor: "#888",
+                displayStyle: "block",
+              })
+              .run()
+          }
+        >
+          Вставить текстовую рамку
+        </Button>
+
+        {editor && editor.isActive("textBox") && (
+          <TextBoxControls editor={editor} />
+        )}
+
+        <Button variant="contained" onClick={handleExport} color="success">
+          Сохранить
+        </Button>
+
+        <Button variant="contained" onClick={handleExportToPDF}>
+          Экспорт в PDF
+        </Button>
+      </Box>
+
+      <AnchorLinkDialog
+        open={anchorDialogOpen}
+        anchors={anchors}
+        loading={anchorsLoading}
+        onClose={() => setAnchorDialogOpen(false)}
+        onInsert={insertAnchorLink}
       />
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={() =>
-          editor
-            ?.chain()
-            .focus()
-            .wrapIn("textBox", {
-              backgroundColor: "#f9f9f9",
-              borderColor: "#888",
-              displayStyle: "block",
-            })
-            .run()
-        }
-      >
-        Вставить текстовую рамку
-      </Button>
-      {editor && editor.isActive("textBox") && (
-        <TextBoxControls editor={editor} />
-      )}
-      <Button variant="contained" onClick={handleExport} color="success">
-        Сохранить
-      </Button>
-      <Button variant="contained" onClick={handleExportToPDF}>
-        Экспорт в PDF
-      </Button>
-    </Box>
+    </>
   );
 }

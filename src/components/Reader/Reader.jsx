@@ -24,10 +24,12 @@ export default function Reader() {
   const [fullDoc, setFullDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageBlockSize, setPageBlockSize] = useState(500);
+
   function updateBlockSize(value) {
     const newSize = parseInt(value);
     setPageBlockSize(newSize);
     setCurrentPage(0);
+
     if (fullDoc && editor) {
       const sliced = {
         ...fullDoc,
@@ -37,6 +39,7 @@ export default function Reader() {
       editor.commands.setContent(sliced, false);
     }
   }
+
   const pageLabel = pageBlockSize === -1 ? "Весь текст" : `${pageBlockSize}`;
 
   const [start, setStart] = useState();
@@ -47,6 +50,7 @@ export default function Reader() {
 
   const initialSection = searchParams.get("section");
   const initialPoint = searchParams.get("point");
+  const initialAnchor = searchParams.get("anchor");
 
   useNearestHeadings(setSection, setPoint, fullDoc, currentPage, pageBlockSize);
 
@@ -54,7 +58,7 @@ export default function Reader() {
     if (editor) {
       editor.setEditable(edit);
     }
-  }, [edit]);
+  }, [edit, editor]);
 
   function triggerHighlight() {
     setTrigger((prev) => !prev);
@@ -65,11 +69,14 @@ export default function Reader() {
     const { from, to } = editor.state.selection;
     return editor.state.doc.textBetween(from, to, " ").trim();
   }
+
   function openSearchUnified() {
     const selected = getSelectedText();
     const params = new URLSearchParams(searchParams);
     params.delete("section");
     params.delete("point");
+    params.delete("anchor");
+
     if (selected) {
       params.set("query", selected);
       params.delete("openSearch");
@@ -77,6 +84,7 @@ export default function Reader() {
       params.delete("query");
       params.set("openSearch", "1");
     }
+
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
@@ -87,13 +95,16 @@ export default function Reader() {
     const editedPageContent = editor.getJSON().content;
     const pageStart = currentPage * pageBlockSize;
     const pageEnd = pageStart + pageBlockSize;
+
     const updatedFullDoc = {
       ...fullDoc,
       content: [...fullDoc.content.slice(0, pageStart), ...editedPageContent],
     };
+
     if (pageEnd > -1) {
       updatedFullDoc.content.push(...fullDoc.content.slice(pageEnd));
     }
+
     const fullContent = updatedFullDoc;
     const chapters = [];
     let currentChapter = null;
@@ -110,9 +121,11 @@ export default function Reader() {
               content: { type: "doc", content: currentChapter.content },
             }),
           });
+
           const data = await res.json();
           if (data.section) chapters.push(data.section);
         }
+
         currentChapter = {
           slug: block.content?.[0]?.text || "glava",
           content: [block],
@@ -132,6 +145,7 @@ export default function Reader() {
           content: { type: "doc", content: currentChapter.content },
         }),
       });
+
       const data = await res.json();
       if (data.section) chapters.push(data.section);
     }
@@ -158,12 +172,14 @@ export default function Reader() {
 
   function goToPage(page) {
     if (!fullDoc || !editor || pageBlockSize === -1) return;
+
     const start = page * pageBlockSize;
     const end = pageBlockSize === -1 ? undefined : start + pageBlockSize;
     const sliced = {
       ...fullDoc,
       content: fullDoc.content.slice(start, end),
     };
+
     setCurrentPage(page);
     editor.commands.setContent(sliced, false);
   }
@@ -180,7 +196,7 @@ export default function Reader() {
           fullDoc,
           match.blockIndex,
           match.childIndexPath,
-          match.charIndex
+          match.charIndex,
         );
         highlight(relativePos, relativePos + match.length);
       }, 0);
@@ -206,7 +222,7 @@ export default function Reader() {
           sliced,
           localBlockIndex,
           match.childIndexPath,
-          match.charIndex
+          match.charIndex,
         );
         highlight(relativePos, relativePos + match.length);
       }, 0);
@@ -215,17 +231,20 @@ export default function Reader() {
 
   useEffect(() => {
     if (!editor || isNaN(start) || isNaN(end)) return;
+
     editor.commands.setSearchHighlight(start, end);
+
     const el = document.getElementById("search-target");
     if (el) {
       setTimeout(() => {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 0);
     }
-  }, [start, end, trigger]);
+  }, [start, end, trigger, editor]);
 
   useEffect(() => {
     if (!isLoaded || !editor) return;
+
     const json = editor.getJSON();
     setFullDoc(json);
 
@@ -233,22 +252,24 @@ export default function Reader() {
       ...json,
       content: json.content.slice(0, pageBlockSize),
     };
+
     editor.commands.setContent(slice, false);
-  }, [editor, isLoaded]);
+  }, [editor, isLoaded, pageBlockSize]);
 
   useEffect(() => {
-    function goToSection(id) {
-      if (!fullDoc || !Array.isArray(fullDoc.content)) return;
-      const index = fullDoc.content.findIndex((block) => {
-        return block.attrs?.id === id;
-      });
+    function goToBlockId(id) {
+      if (!fullDoc || !Array.isArray(fullDoc.content) || !editor || !id) return;
+
+      const index = fullDoc.content.findIndex(
+        (block) => block.attrs?.id === id,
+      );
       if (index === -1) return;
 
       if (pageBlockSize === -1) {
         setCurrentPage(0);
         editor.commands.setContent(fullDoc, false);
 
-        waitForElement(`#${CSS.escape(id)}`, 20).then((el) => {
+        waitForElement(`#${CSS.escape(id)}`, 5000, 100).then((el) => {
           if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
         });
         return;
@@ -263,30 +284,79 @@ export default function Reader() {
       };
 
       setCurrentPage(pageIndex);
+
       setTimeout(() => {
         editor.commands.setContent(sliced, false);
       }, 0);
 
-      waitForElement(`#${CSS.escape(id)}`).then((el) => {
+      waitForElement(`#${CSS.escape(id)}`, 5000, 100).then((el) => {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
 
-    if (!isLoaded || (!initialSection && !initialPoint)) return;
+    function goToAnchor(anchorId) {
+      if (!fullDoc || !Array.isArray(fullDoc.content) || !editor || !anchorId)
+        return;
+
+      const index = findAnchorBlockIndex(fullDoc, anchorId);
+      if (index === -1) return;
+
+      if (pageBlockSize === -1) {
+        setCurrentPage(0);
+        editor.commands.setContent(fullDoc, false);
+
+        waitForElement(`#${CSS.escape(anchorId)}`, 5000, 100).then((el) => {
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+        return;
+      }
+
+      const pageIndex = Math.floor(index / pageBlockSize);
+      const sliceStart = pageIndex * pageBlockSize;
+      const sliceEnd = sliceStart + pageBlockSize;
+      const sliced = {
+        ...fullDoc,
+        content: fullDoc.content.slice(sliceStart, sliceEnd),
+      };
+
+      setCurrentPage(pageIndex);
+
+      setTimeout(() => {
+        editor.commands.setContent(sliced, false);
+      }, 0);
+
+      waitForElement(`#${CSS.escape(anchorId)}`, 5000, 100).then((el) => {
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+
+    if (!isLoaded || !editor || !fullDoc) return;
+    if (!initialSection && !initialPoint && !initialAnchor) return;
+
     setStart(NaN);
     setEnd(NaN);
     triggerHighlight();
+
+    if (!isReadyToScroll) return;
+
+    if (initialAnchor) {
+      goToAnchor(initialAnchor);
+      return;
+    }
+
     const targetId = initialPoint || initialSection;
-    if (isReadyToScroll) {
-      goToSection(targetId);
+    if (targetId) {
+      goToBlockId(targetId);
     }
   }, [
     editor,
     isLoaded,
     initialPoint,
     initialSection,
+    initialAnchor,
     isReadyToScroll,
     fullDoc,
+    pageBlockSize,
   ]);
 
   const totalPages = fullDoc
@@ -329,8 +399,8 @@ export default function Reader() {
 
       e.preventDefault();
 
-      const samePath = url.pathname === window.location.pathname && !url.search;
-      if (samePath && url.hash) {
+      const samePath = url.pathname === window.location.pathname;
+      if (samePath && !url.search && url.hash) {
         document.getElementById(url.hash.slice(1))?.scrollIntoView({
           behavior: "smooth",
         });
@@ -361,6 +431,7 @@ export default function Reader() {
       root.removeEventListener("mouseenter", onMouseEnter, true);
     };
   }, [editor, router]);
+
   return (
     <>
       {isLoaded ? (
@@ -385,6 +456,7 @@ export default function Reader() {
           <CircularProgress size={48} />
         </Box>
       )}
+
       {isLoaded && edit ? (
         <TipTapButtons
           editor={editor}
@@ -411,9 +483,11 @@ export default function Reader() {
             >
               Назад
             </Button>
+
             <Typography variant="body1" sx={{ alignSelf: "center" }}>
               Страница {currentPage + 1} из {totalPages}
             </Typography>
+
             <Button
               variant="contained"
               onClick={() => goToPage(currentPage + 1)}
@@ -436,6 +510,7 @@ export default function Reader() {
               renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
             />
           </Box>
+
           {isLoaded && !edit && (
             <Button
               variant="contained"
@@ -466,7 +541,7 @@ function getRelativePositionInSlice(
   slice,
   blockIndex,
   childIndexPath,
-  charIndex
+  charIndex,
 ) {
   let pos = 1;
 
@@ -477,15 +552,49 @@ function getRelativePositionInSlice(
 
   let currentNode = slice.content[blockIndex];
   for (let idx of childIndexPath) {
-    if (!currentNode || !currentNode.content || !currentNode.content[idx])
+    if (!currentNode || !currentNode.content || !currentNode.content[idx]) {
       break;
+    }
+
     for (let i = 0; i < idx; i++) {
       pos += getNodeLength(currentNode.content[i]);
     }
+
     currentNode = currentNode.content[idx];
   }
 
   return pos + charIndex;
+}
+
+function blockContainsAnchor(node, anchorId) {
+  if (!node || !anchorId) return false;
+
+  if (Array.isArray(node)) {
+    return node.some((child) => blockContainsAnchor(child, anchorId));
+  }
+
+  if (typeof node !== "object") return false;
+
+  if (Array.isArray(node.marks)) {
+    const hasAnchor = node.marks.some(
+      (mark) => mark?.type === "anchor" && mark?.attrs?.anchorId === anchorId,
+    );
+    if (hasAnchor) return true;
+  }
+
+  if (Array.isArray(node.content)) {
+    return node.content.some((child) => blockContainsAnchor(child, anchorId));
+  }
+
+  return false;
+}
+
+function findAnchorBlockIndex(fullDoc, anchorId) {
+  if (!fullDoc?.content || !anchorId) return -1;
+
+  return fullDoc.content.findIndex((block) =>
+    blockContainsAnchor(block, anchorId),
+  );
 }
 
 function waitForElement(selector, timeout = 5000, interval = 200) {

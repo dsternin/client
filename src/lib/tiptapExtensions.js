@@ -11,6 +11,7 @@ import { TextBox } from "@/components/Tiptap/extensions/TextBox";
 import CustomHeading from "@/components/Tiptap/extensions/CustomHeading";
 import SearchHighlight from "@/components/Tiptap/extensions/SearchHighlight";
 import Link from "@tiptap/extension-link";
+import AnchorMark from "@/components/Tiptap/extensions/AnchorMark";
 
 export default function getEditorExtensions() {
   return [
@@ -40,5 +41,6 @@ export default function getEditorExtensions() {
         rel: null,
       },
     }),
+    AnchorMark,
   ];
 }
