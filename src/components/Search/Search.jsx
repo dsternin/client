@@ -31,7 +31,7 @@ const lruSet = (key, val) => {
     searchCache.delete(oldest);
   }
 };
-const normalizeQ = (q) => (q || "").trim().toLowerCase();
+const normalizeQ = (q) => (q || "").trim();
 
 export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const searchParams = useSearchParams();
@@ -100,9 +100,11 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const searchInDocument = (doc, q) => {
     const results = [];
     const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(safe, "gi");
+    const regex = new RegExp(safe, "g");
+
     (doc?.content || []).forEach((block, blockIndex) => {
       if (!block?.content) return;
+
       block.content.forEach((child, childIndex) => {
         if (child?.text) {
           let m;
@@ -117,6 +119,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
         }
       });
     });
+
     return results;
   };
 
@@ -127,7 +130,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     const blocksCount = blocks.length;
     const childrenSum = blocks.reduce(
       (s, b) => s + (b?.content?.length || 0),
-      0
+      0,
     );
     return `${blocksCount}:${childrenSum}`;
   };
@@ -158,7 +161,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
         for (const b of toc) {
           const metaRes = await fetch(
             `/api/content/books?book=${encodeURIComponent(b.name)}`,
-            { signal }
+            { signal },
           );
           const meta = await metaRes.json();
           const label = meta.label || b.name;
@@ -167,9 +170,9 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
           for (const ch of chapters) {
             const chRes = await fetch(
               `/api/content/chapters?book=${encodeURIComponent(
-                b.name
+                b.name,
               )}&section=${encodeURIComponent(ch.title)}`,
-              { signal }
+              { signal },
             );
             const chData = await chRes.json();
             blocks.push(...(chData.content?.content || []));
