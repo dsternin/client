@@ -19,13 +19,14 @@ export async function GET(req) {
   if (!query || typeof query !== "string") {
     return NextResponse.json(
       { error: "Не указан поисковый запрос" },
-      { status: 400 }
+      { status: 400 },
     );
   }
+
   if (!bookName) {
     return NextResponse.json(
       { error: "Параметр 'book' обязателен" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -38,11 +39,10 @@ export async function GET(req) {
 
   const sections = await getBookChaptersWithTitles(bookDoc);
 
-
   const chapters = await Promise.all(
     sections.map((section) =>
-      Chapter.findOne({ book: bookName, section: section.title })
-    )
+      Chapter.findOne({ book: bookName, section: section.title }),
+    ),
   );
 
   const matches = [];
@@ -54,7 +54,7 @@ export async function GET(req) {
     const localMatches = findWordInTipTapContent(
       chapter.content.content,
       query,
-      blockOffset
+      blockOffset,
     );
 
     localMatches.forEach((m) => {
@@ -75,34 +75,20 @@ export async function GET(req) {
 
 function findWordInTipTapContent(contentArray, search, blockOffset = 0) {
   const matches = [];
-  const lowerSearch = search.toLowerCase();
 
   contentArray.forEach((block, blockIndex) => {
-    searchInNode(
-      block,
-      blockOffset + blockIndex,
-      [],
-      lowerSearch,
-      search,
-      matches
-    );
+    searchInNode(block, blockOffset + blockIndex, [], search, matches);
   });
 
   return matches;
 }
 
-function searchInNode(
-  node,
-  globalBlockIndex,
-  childPath,
-  lowerSearch,
-  search,
-  matches
-) {
+function searchInNode(node, globalBlockIndex, childPath, search, matches) {
   if (node.text) {
-    const text = node.text.toLowerCase();
+    const text = node.text;
     let pos = -1;
-    while ((pos = text.indexOf(lowerSearch, pos + 1)) !== -1) {
+
+    while ((pos = text.indexOf(search, pos + 1)) !== -1) {
       matches.push({
         blockIndex: globalBlockIndex,
         childIndexPath: [...childPath],
@@ -118,9 +104,8 @@ function searchInNode(
         child,
         globalBlockIndex,
         [...childPath, idx],
-        lowerSearch,
         search,
-        matches
+        matches,
       );
     });
   }
