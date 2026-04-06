@@ -201,7 +201,7 @@ function extractAnchorsFromTiptapJSON(content) {
   return anchors;
 }
 
-async function syncChapterAnchors(book, section, content) {
+export async function syncChapterAnchors(book, section, content) {
   await dbConnect();
 
   const anchors = extractAnchorsFromTiptapJSON(content);

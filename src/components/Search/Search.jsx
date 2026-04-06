@@ -8,12 +8,11 @@ import {
   Box,
   CircularProgress,
   IconButton,
-  colors,
 } from "@mui/material";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
-import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close";
 import RedButton from "../RedButton";
+import { useAuth } from "@/store/AuthContext";
 
 const CACHE_MAX = 12;
 const searchCache = new Map();
@@ -33,7 +32,19 @@ const lruSet = (key, val) => {
 };
 const normalizeQ = (q) => (q || "").trim();
 
-export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
+export default function Search({
+  goToMatch,
+  editor,
+  isLoaded,
+  fullDoc,
+  onReloadCurrentBook,
+}) {
+  const { user } = useAuth();
+  const isAdmin = user?.role == "admin";
+  const [replaceInput, setReplaceInput] = useState("");
+  const [replaceLoading, setReplaceLoading] = useState(false);
+  const [replaceMessage, setReplaceMessage] = useState(null);
+
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -71,6 +82,7 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     setBooksMatches([]);
     setCursor(-1);
     setError(null);
+    setReplaceMessage(null);
   };
 
   useEffect(() => {
@@ -262,6 +274,8 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
     setQueryInput("");
     resetResults();
     setHasSubmitted(false);
+    setReplaceInput("");
+    setReplaceMessage(null);
 
     const params = new URLSearchParams(searchParams);
     params.delete("query");
@@ -288,6 +302,67 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
   const hasQuery = (queryInput || "").trim().length > 0;
   const currentBook = booksMatches.find((b) => b.name === book) || {};
   const currentLabel = currentBook.label || book;
+
+  const handleBulkReplace = async () => {
+    const searchValue = (queryInput || "").trim();
+
+    if (!isAdmin) return;
+
+    if (!searchValue) {
+      setReplaceMessage("Сначала введите текст для поиска.");
+      return;
+    }
+
+    if (!book) {
+      setReplaceMessage("Не указана книга для замены.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Заменить все вхождения "${searchValue}" на "${replaceInput}" в текущей книге?`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setReplaceLoading(true);
+      setReplaceMessage(null);
+
+      const res = await fetch("/api/content/search-replace", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          book,
+          search: searchValue,
+          replaceWith: replaceInput || "",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setReplaceMessage(data?.error || "Ошибка при массовой замене.");
+        return;
+      }
+
+      searchCache.clear();
+
+      await onReloadCurrentBook?.();
+
+      setReplaceMessage(
+        `Готово. Заменено вхождений: ${data.count}. Изменено глав: ${data.updatedChapters}.`,
+      );
+    } catch (err) {
+      console.error(err);
+      setReplaceMessage("Ошибка при массовой замене.");
+    } finally {
+      setReplaceLoading(false);
+    }
+  };
 
   return (
     <>
@@ -335,8 +410,40 @@ export default function Search({ goToMatch, editor, isLoaded, fullDoc }) {
               Поиск
             </Button>
           </Box>
+          {isAdmin && (
+            <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+              <TextField
+                label="Заменить на"
+                value={replaceInput}
+                onChange={(e) => setReplaceInput(e.target.value)}
+                fullWidth
+                size="small"
+                autoComplete="off"
+              />
+              <Button
+                variant="contained"
+                color="error"
+                onClick={handleBulkReplace}
+                disabled={replaceLoading || loading || !hasQuery}
+              >
+                {replaceLoading ? "Замена..." : "Массовая замена на"}
+              </Button>
+            </Box>
+          )}
 
           {loading && <CircularProgress size={24} />}
+
+          {replaceMessage && (
+            <Typography
+              variant="body2"
+              color={
+                replaceMessage.startsWith("Готово") ? "success.main" : "error"
+              }
+              sx={{ mt: 1, mb: 1 }}
+            >
+              {replaceMessage}
+            </Typography>
+          )}
 
           {!loading && hasQuery && hasSubmitted && (
             <>

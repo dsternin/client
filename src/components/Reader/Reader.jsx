@@ -164,6 +164,72 @@ export default function Reader() {
     }
   }
 
+  async function reloadCurrentBook() {
+    if (!book || !editor) return;
+
+    const metaRes = await fetch(
+      `/api/content/books?book=${encodeURIComponent(book)}`,
+      {
+        cache: "no-store",
+      },
+    );
+
+    if (!metaRes.ok) {
+      throw new Error("Не удалось загрузить метаданные книги");
+    }
+
+    const meta = await metaRes.json();
+    const chapters = meta.chapters || [];
+
+    const blocks = [];
+
+    for (const ch of chapters) {
+      const chRes = await fetch(
+        `/api/content/chapters?book=${encodeURIComponent(book)}&section=${encodeURIComponent(ch.title)}`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      if (!chRes.ok) {
+        continue;
+      }
+
+      const chData = await chRes.json();
+      blocks.push(...(chData.content?.content || []));
+    }
+
+    const freshDoc = {
+      type: "doc",
+      content: blocks,
+    };
+
+    setFullDoc(freshDoc);
+
+    if (pageBlockSize === -1) {
+      setCurrentPage(0);
+      editor.commands.setContent(freshDoc, false);
+      return;
+    }
+
+    const maxPage = Math.max(
+      0,
+      Math.ceil(freshDoc.content.length / pageBlockSize) - 1,
+    );
+    const nextPage = Math.min(currentPage, maxPage);
+    const sliceStart = nextPage * pageBlockSize;
+    const sliceEnd = sliceStart + pageBlockSize;
+
+    setCurrentPage(nextPage);
+    editor.commands.setContent(
+      {
+        ...freshDoc,
+        content: freshDoc.content.slice(sliceStart, sliceEnd),
+      },
+      false,
+    );
+  }
+
   function highlight(start, end) {
     setEnd(end);
     setStart(start);
@@ -442,6 +508,7 @@ export default function Reader() {
             fullDoc={fullDoc}
             goToMatch={goToMatch}
             isLoaded={isLoaded}
+            onReloadCurrentBook={reloadCurrentBook}
           />
         )
       ) : (
