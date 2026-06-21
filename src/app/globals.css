@@ -56,7 +56,10 @@ body {
 }
 
 .search-highlight {
-  background-color: aqua;
+  background-color: #ffeb3b !important;
+  color: inherit;
+  outline: 2px solid #ff9800;
+  border-radius: 2px;
 }
 
 .stickyHeaderWrapper {

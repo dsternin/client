@@ -5,10 +5,8 @@ import {
   BookSchema,
   getBookChaptersWithTitles,
 } from "@/app/api/content/books/route";
-import { ChapterSchema } from "@/app/api/content/chapters/route";
+import { loadChapter } from "@/app/api/content/chapters/route";
 
-const Chapter =
-  mongoose.models.Chapter || mongoose.model("Chapter", ChapterSchema);
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
 export async function GET(req) {
@@ -23,48 +21,101 @@ export async function GET(req) {
     );
   }
 
-  if (!bookName) {
-    return NextResponse.json(
-      { error: "Параметр 'book' обязателен" },
-      { status: 400 },
-    );
-  }
-
   await dbConnect();
 
-  const bookDoc = await Book.findOne({ name: bookName });
-  if (!bookDoc) {
-    return NextResponse.json({ error: "Книга не найдена" }, { status: 404 });
-  }
-
-  const sections = await getBookChaptersWithTitles(bookDoc);
-
-  const chapters = await Promise.all(
-    sections.map((section) =>
-      Chapter.findOne({ book: bookName, section: section.title }),
-    ),
-  );
-
   const matches = [];
-  let blockOffset = 0;
 
-  for (const chapter of chapters) {
-    if (!chapter || !chapter.content?.content) continue;
+  if (bookName) {
+    // Search in a single book
+    const bookDoc = await Book.findOne({ name: bookName });
+    if (!bookDoc) {
+      return NextResponse.json({ error: "Книга не найдена" }, { status: 404 });
+    }
 
-    const localMatches = findWordInTipTapContent(
-      chapter.content.content,
-      query,
-      blockOffset,
+    const sections = await getBookChaptersWithTitles(bookDoc);
+    const chapters = await Promise.all(
+      sections.map((section) => loadChapter(bookName, section.title)),
     );
 
-    localMatches.forEach((m) => {
-      matches.push({
-        section: chapter.section,
-        ...m,
-      });
-    });
+    let blockOffset = 0;
+    for (let i = 0; i < chapters.length; i++) {
+      const chapterData = chapters[i];
+      if (!chapterData) continue;
 
-    blockOffset += chapter.content.content.length;
+      // Normalize chapter data shape
+      let doc = null;
+      if (chapterData.content && Array.isArray(chapterData.content)) {
+        doc = { type: chapterData.type, content: chapterData.content };
+      } else if (chapterData.content && chapterData.content.content) {
+        doc = chapterData.content;
+      } else {
+        doc = chapterData;
+      }
+
+      const contentArray = (doc && Array.isArray(doc.content)) ? doc.content : [];
+      if (!contentArray.length) continue;
+
+      const localMatches = findWordInTipTapContent(
+        contentArray,
+        query,
+        blockOffset,
+      );
+
+      localMatches.forEach((m) => {
+        matches.push({
+          book: bookName,
+          section: sections[i].title,
+          ...m,
+        });
+      });
+
+      blockOffset += contentArray.length;
+    }
+  } else {
+    // Search across all books
+    const books = await Book.find({});
+
+    for (const bookDoc of books) {
+      const sections = await getBookChaptersWithTitles(bookDoc);
+      const chapters = await Promise.all(
+        sections.map((section) => loadChapter(bookDoc.name, section.title)),
+      );
+
+      let blockOffset = 0;
+      for (let i = 0; i < chapters.length; i++) {
+        const chapterData = chapters[i];
+        if (!chapterData) continue;
+
+        // Normalize chapter data shape
+        let doc = null;
+        if (chapterData.content && Array.isArray(chapterData.content)) {
+          doc = { type: chapterData.type, content: chapterData.content };
+        } else if (chapterData.content && chapterData.content.content) {
+          doc = chapterData.content;
+        } else {
+          doc = chapterData;
+        }
+
+        const contentArray = (doc && Array.isArray(doc.content)) ? doc.content : [];
+        if (!contentArray.length) continue;
+
+        const localMatches = findWordInTipTapContent(
+          contentArray,
+          query,
+          blockOffset,
+        );
+
+        localMatches.forEach((m) => {
+          matches.push({
+            book: bookDoc.name,
+            section: sections[i].title,
+            ...m,
+          });
+        });
+
+        blockOffset += contentArray.length;
+      }
+    }
   }
 
   return NextResponse.json({

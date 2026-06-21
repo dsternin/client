@@ -149,11 +149,26 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
   const pageBlocks = pageContent || [];
   const updatedSections = [];
   let currentIndex = 0;
-  let pageSliceOffset = 0;
+
+  // Collect updates first so we can handle extra blocks if client sent more than expected
+  const pendingUpdates = [];
+  let expectedPageLen = 0; // total number of blocks we expect to replace across chapters
 
   for (const section of bookDoc.chapters) {
     const chapterData = await loadChapter(bookName, section);
-    const originalBlocks = chapterData?.content?.content || [];
+    // Normalize chapterData shapes (same logic as readBookChapters)
+    let doc = null;
+    if (!chapterData) {
+      doc = null;
+    } else if (chapterData.content && Array.isArray(chapterData.content)) {
+      doc = { type: chapterData.type, content: chapterData.content };
+    } else if (chapterData.content && chapterData.content.content) {
+      doc = chapterData.content;
+    } else {
+      doc = chapterData;
+    }
+
+    const originalBlocks = (doc && Array.isArray(doc.content)) ? doc.content : [];
     const chapterLength = originalBlocks.length;
     const chapterStart = currentIndex;
     const chapterEnd = currentIndex + chapterLength;
@@ -167,29 +182,68 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
 
     const sliceStart = Math.max(0, start - chapterStart);
     const sliceEnd = Math.min(chapterLength, end - chapterStart);
-    const pageSliceStart = Math.max(0, chapterStart - start);
-    const pageSliceEnd = pageSliceStart + (sliceEnd - sliceStart);
+    const sliceLen = Math.max(0, sliceEnd - sliceStart);
+
+    pendingUpdates.push({
+      section,
+      originalBlocks,
+      sliceStart,
+      sliceEnd,
+      sliceLen,
+    });
+
+    expectedPageLen += sliceLen;
+    currentIndex = chapterEnd;
+  }
+
+  // Apply page blocks into pending updates sequentially
+  let pagePointer = 0;
+  for (let i = 0; i < pendingUpdates.length; i++) {
+    const u = pendingUpdates[i];
+    const { section, originalBlocks, sliceStart, sliceEnd, sliceLen } = u;
+
+    const pageChunk = pageBlocks.slice(pagePointer, pagePointer + sliceLen);
+    pagePointer += sliceLen;
 
     const updatedBlocks = [
       ...originalBlocks.slice(0, sliceStart),
-      ...pageBlocks.slice(pageSliceStart, pageSliceEnd),
+      ...pageChunk,
       ...originalBlocks.slice(sliceEnd),
     ];
 
+    // store updated blocks for saving; we'll adjust last one if there are extra blocks
+    u.updatedBlocks = updatedBlocks;
+    updatedSections.push(section);
+  }
+
+  // If client provided more blocks than expected (e.g., page overflowed), append remaining
+  if (pagePointer < pageBlocks.length && pendingUpdates.length > 0) {
+    const extra = pageBlocks.slice(pagePointer);
+    const last = pendingUpdates[pendingUpdates.length - 1];
+    // insert extra between the last page chunk and the suffix
+    const { originalBlocks, sliceStart, sliceEnd, sliceLen } = last;
+    const lastChunkStart = expectedPageLen - sliceLen;
+    const lastChunk = pageBlocks.slice(lastChunkStart, lastChunkStart + sliceLen);
+    last.updatedBlocks = [
+      ...originalBlocks.slice(0, sliceStart),
+      ...lastChunk,
+      ...extra,
+      ...originalBlocks.slice(sliceEnd),
+    ];
+  }
+
+  // Persist updates
+  for (const u of pendingUpdates) {
     await saveChapter(
       bookName,
-      section,
-      JSON.stringify(createDocument(updatedBlocks)),
+      u.section,
+      JSON.stringify(createDocument(u.updatedBlocks || [])),
     );
     await syncChapterAnchors(
       bookName,
-      section,
-      createDocument(updatedBlocks),
+      u.section,
+      createDocument(u.updatedBlocks || []),
     );
-
-    updatedSections.push(section);
-    pageSliceOffset += sliceEnd - sliceStart;
-    currentIndex = chapterEnd;
   }
 
   return updatedSections;

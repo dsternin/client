@@ -42,12 +42,23 @@ const SearchHighlight = Mark.create({
                   });
                 }
               });
+
+              const docSize = tr.doc.content.size;
+              const safeFrom = Math.max(1, Math.min(from, docSize));
+              const safeTo = Math.max(safeFrom + 1, Math.min(to, docSize));
+
+              if (safeFrom < safeTo) {
+                tr.addMark(
+                  safeFrom,
+                  safeTo,
+                  this.type.create({
+                    class: "search-highlight",
+                    id: "search-target",
+                  }),
+                );
+              }
+
               return true;
-            })
-            .setTextSelection({ from, to })
-            .setMark(this.name, {
-              class: "search-highlight",
-              id: "search-target",
             })
             .run();
         },

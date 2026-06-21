@@ -73,6 +73,7 @@ export default function Reader() {
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [pageDoc, setPageDoc] = useState(null);
+  const [loadedPage, setLoadedPage] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageBlockSize, setPageBlockSize] = useState(500);
   const [totalPages, setTotalPages] = useState(0);
@@ -126,18 +127,22 @@ export default function Reader() {
 
   async function loadPageDocument(page, pageSize) {
     if (!book) return;
+    const requestId = ++pageRequestIdRef.current;
     setLoadingPage(true);
     setPageError(null);
 
     try {
       const payload = await fetchPage(book, page, pageSize);
+      if (requestId !== pageRequestIdRef.current) return;
       if (!payload) {
         setPageDoc(null);
+        setLoadedPage(null);
         return;
       }
 
       const content = addIdsToHeadings(payload.pageContent?.content || []);
       setPageDoc(content);
+      setLoadedPage(page);
       setTotalPages(payload.totalPages || totalPages);
       setTotalBlocks(payload.totalBlocks || totalBlocks);
       setBookLabel(payload.label);
@@ -145,7 +150,9 @@ export default function Reader() {
       console.error(error);
       setPageError("Ошибка загрузки страницы");
     } finally {
-      setLoadingPage(false);
+      if (requestId === pageRequestIdRef.current) {
+        setLoadingPage(false);
+      }
     }
   }
 
@@ -160,6 +167,9 @@ export default function Reader() {
   const [start, setStart] = useState();
   const [end, setEnd] = useState();
   const [trigger, setTrigger] = useState(false);
+  const [pendingMatch, setPendingMatch] = useState(null);
+  const [pageAppliedRevision, setPageAppliedRevision] = useState(0);
+  const pageRequestIdRef = useRef(0);
 
   const searchParams = useSearchParams();
 
@@ -175,11 +185,12 @@ export default function Reader() {
     }
   }, [edit, editor]);
 
-  function scheduleSetContent(doc, replace = false) {
+  function scheduleSetContent(doc, replace = false, onApplied) {
     if (!editor) return;
     Promise.resolve().then(() => {
       try {
         editor.commands.setContent(doc, replace);
+        onApplied?.();
       } catch (e) {
         console.error("setContent failed", e);
       }
@@ -217,8 +228,11 @@ export default function Reader() {
   useEffect(() => {
     if (!book) return;
     setIsLoaded(false);
+    pageRequestIdRef.current += 1;
     setFullDoc(null);
     setPageDoc(null);
+    setLoadedPage(null);
+    setPendingMatch(null);
     setCurrentPage(0);
     setTotalPages(0);
     setTotalBlocks(0);
@@ -250,7 +264,9 @@ export default function Reader() {
       return;
     }
     if (pageDoc) {
-      scheduleSetContent({ type: "doc", content: pageDoc }, false);
+      scheduleSetContent({ type: "doc", content: pageDoc }, false, () => {
+        setPageAppliedRevision((prev) => prev + 1);
+      });
       setIsLoaded(true);
       setIsReadyToScroll(true);
     }
@@ -307,61 +323,77 @@ export default function Reader() {
   }
 
   function goToMatch(match) {
-    if (!fullDoc || !editor) return;
+    if (!editor || !match) return;
 
-      if (pageBlockSize === -1) {
-        setCurrentPage(0);
-        scheduleSetContent(fullDoc, false);
+    const targetPage =
+      pageBlockSize === -1 ? 0 : Math.floor(match.blockIndex / pageBlockSize);
 
-        setTimeout(() => {
-          const relativePos = getRelativePositionInSlice(
-            fullDoc,
-            match.blockIndex,
-            match.childIndexPath,
-            match.charIndex,
-          );
-          highlight(relativePos, relativePos + match.length);
-        }, 0);
-
-        return;
-      }
-
-      const pageIndex = Math.floor(match.blockIndex / pageBlockSize);
-      const sliceStart = pageIndex * pageBlockSize;
-      const sliceEnd = sliceStart + pageBlockSize;
-      const sliced = {
-        ...fullDoc,
-        content: fullDoc.content.slice(sliceStart, sliceEnd),
-      };
-
-      setTimeout(() => {
-        setCurrentPage(pageIndex);
-        scheduleSetContent(sliced, false);
-
-        setTimeout(() => {
-          const localBlockIndex = match.blockIndex % pageBlockSize;
-          const relativePos = getRelativePositionInSlice(
-            sliced,
-            localBlockIndex,
-            match.childIndexPath,
-            match.charIndex,
-          );
-          highlight(relativePos, relativePos + match.length);
-        }, 0);
-      }, 0);
+    setPendingMatch({ match, targetPage });
+    setCurrentPage(targetPage);
   }
 
   useEffect(() => {
-    if (!editor || isNaN(start) || isNaN(end)) return;
+    if (!editor || !pendingMatch || !pageDoc) return;
+    if (loadingBook || loadingPage) return;
+    if (currentPage !== pendingMatch.targetPage) return;
+    if (loadedPage !== pendingMatch.targetPage) return;
 
+    const localBlockIndex =
+      pageBlockSize === -1
+        ? pendingMatch.match.blockIndex
+        : pendingMatch.match.blockIndex % pageBlockSize;
+
+    if (localBlockIndex < 0 || localBlockIndex >= pageDoc.length) {
+      return;
+    }
+
+    const relativePos = getRelativePositionInEditorDoc(
+      editor.state.doc,
+      localBlockIndex,
+      pendingMatch.match.childIndexPath,
+      pendingMatch.match.charIndex,
+    );
+
+    if (!Number.isFinite(relativePos)) return;
+
+    const range = clampHighlightRange(
+      editor.state.doc,
+      relativePos,
+      pendingMatch.match.length,
+    );
+    if (!range) return;
+
+    highlight(range.from, range.to);
+    setPendingMatch(null);
+  }, [
+    editor,
+    pendingMatch,
+    pageDoc,
+    loadedPage,
+    currentPage,
+    pageBlockSize,
+    loadingBook,
+    loadingPage,
+    pageAppliedRevision,
+  ]);
+
+  useEffect(() => {
+    if (!editor || isNaN(start) || isNaN(end)) return;
     editor.commands.setSearchHighlight(start, end);
 
-    const el = document.getElementById("search-target");
-    if (el) {
-      setTimeout(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 0);
-    }
+    // Wait for the mark render, then center viewport by editor coordinates.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const centered = centerViewportOnEditorRange(editor, start, end);
+        if (!centered) {
+          waitForElement("#search-target", 1000, 50).then((el) => {
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          });
+        }
+      });
+    });
   }, [start, end, trigger, editor]);
 
   useEffect(() => {
@@ -630,43 +662,78 @@ export default function Reader() {
   );
 }
 
-function getNodeLength(node) {
-  if (!node) return 0;
-  if (node.text) return node.text.length;
-  if (node.type === "customImage" || node.type === "hardBreak") return 1;
-  if (node.content) {
-    return node.content.reduce((sum, child) => sum + getNodeLength(child), 2);
-  }
-  return 2;
-}
-
-function getRelativePositionInSlice(
-  slice,
+function getRelativePositionInEditorDoc(
+  doc,
   blockIndex,
   childIndexPath,
   charIndex,
 ) {
-  let pos = 1;
+  if (!doc || blockIndex < 0 || !Array.isArray(childIndexPath)) return NaN;
+  if (blockIndex >= doc.childCount) return NaN;
 
+  let blockStart = 1;
   for (let i = 0; i < blockIndex; i++) {
-    const block = slice.content[i];
-    pos += getNodeLength(block);
+    blockStart += doc.child(i).nodeSize;
   }
 
-  let currentNode = slice.content[blockIndex];
-  for (let idx of childIndexPath) {
-    if (!currentNode || !currentNode.content || !currentNode.content[idx]) {
-      break;
-    }
+  let currentNode = doc.child(blockIndex);
+  let currentStart = blockStart;
 
+  for (const idx of childIndexPath) {
+    if (!currentNode || idx < 0 || idx >= currentNode.childCount) return NaN;
+
+    let childOffset = 0;
     for (let i = 0; i < idx; i++) {
-      pos += getNodeLength(currentNode.content[i]);
+      childOffset += currentNode.child(i).nodeSize;
     }
 
-    currentNode = currentNode.content[idx];
+    currentStart = currentStart + 1 + childOffset;
+    currentNode = currentNode.child(idx);
   }
 
-  return pos + charIndex;
+  if (!currentNode?.isText) return NaN;
+
+  const safeCharIndex = Math.max(
+    0,
+    Math.min(charIndex || 0, currentNode.text?.length || 0),
+  );
+
+  return currentStart + safeCharIndex;
+}
+
+function clampHighlightRange(doc, from, length) {
+  if (!doc) return null;
+  const docSize = doc.content?.size || 0;
+  if (docSize <= 0) return null;
+
+  const safeFrom = Math.max(1, Math.min(from, docSize));
+  const safeTo = Math.max(safeFrom + 1, Math.min(safeFrom + Math.max(1, length || 1), docSize));
+
+  if (safeFrom >= safeTo) return null;
+  return { from: safeFrom, to: safeTo };
+}
+
+function centerViewportOnEditorRange(editor, from, to) {
+  try {
+    const view = editor?.view;
+    if (!view || !view.state?.doc) return false;
+
+    const docSize = view.state.doc.content?.size || 0;
+    if (docSize <= 0) return false;
+
+    const safeFrom = Math.max(1, Math.min(from, docSize));
+    const safeTo = Math.max(safeFrom, Math.min(to, docSize));
+
+    const head = view.coordsAtPos(safeFrom);
+    const tail = view.coordsAtPos(Math.max(safeFrom, safeTo - 1));
+    const midY = (head.top + tail.bottom) / 2;
+
+    const targetTop = Math.max(0, midY + window.scrollY - window.innerHeight / 2);
+    window.scrollTo({ top: targetTop, behavior: "smooth" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function blockContainsAnchor(node, anchorId) {

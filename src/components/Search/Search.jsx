@@ -65,6 +65,7 @@ export default function Search({
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
   const abortRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   const collapseSelection = () => {
     try {
@@ -104,10 +105,27 @@ export default function Search({
   }, [openFlag, isLoaded, fullDoc]);
 
   useEffect(() => {
-    if (open && count > 0 && matches?.[cursor] && editor) {
-      goToMatch(matches[cursor]);
+    return () => {
+      abortRef.current?.abort?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open || !editor || !isLoaded || !fullDoc) return;
+    if (count <= 0 || !matches?.[cursor]) return;
+    if (matches[cursor].book !== book) return;
+
+    // Re-apply navigation once the target book is fully loaded in Reader.
+    goToMatch(matches[cursor]);
+  }, [cursor, matches, count, editor, open, book, isLoaded, fullDoc]);
+
+  // When book changes, search in the new book and reset cursor
+  useEffect(() => {
+    const q = normalizeQ(queryInput);
+    if (open && q && book && hasSubmitted && isLoaded && fullDoc) {
+      handleSearch(q);
     }
-  }, [cursor, matches, count, editor, open]);
+  }, [book, isLoaded, fullDoc]);
 
   const searchInDocument = (doc, q) => {
     const results = [];
@@ -149,93 +167,76 @@ export default function Search({
 
   const handleSearch = async (searchQuery) => {
     const q = (searchQuery || "").trim();
-    if (!q || !editor || !fullDoc) return;
+    if (!q || !editor) return;
 
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     setBooksMatches([]);
 
     try {
-      const key = normalizeQ(q);
-      let cached = searchCache.get(key);
-      if (!cached) cached = { perBook: new Map() };
+      // First, get all books and their match counts
+      abortRef.current?.abort?.();
+      abortRef.current = new AbortController();
+      const { signal } = abortRef.current;
 
-      if (!cached.global) {
-        abortRef.current?.abort?.();
-        abortRef.current = new AbortController();
-        const { signal } = abortRef.current;
+      const allBooksRes = await fetch(`/api/search?query=${encodeURIComponent(q)}`, { signal });
+      if (signal.aborted || requestId !== requestIdRef.current) return;
+      const allBooks = await allBooksRes.json();
+      if (signal.aborted || requestId !== requestIdRef.current) return;
 
-        const tocRes = await fetch("/api/content/toc", { signal });
-        const toc = await tocRes.json();
-        let globalTotal = 0;
-        const list = [];
+      if (!allBooksRes.ok || !allBooks.matches) {
+        setError("Ошибка при поиске.");
+        setLoading(false);
+        return;
+      }
 
-        for (const b of toc) {
-          const metaRes = await fetch(
-            `/api/content/books?book=${encodeURIComponent(b.name)}`,
-            { signal },
-          );
-          const meta = await metaRes.json();
-          const label = meta.label || b.name;
-          const chapters = meta.chapters || [];
-          const blocks = [];
-          for (const ch of chapters) {
-            const chRes = await fetch(
-              `/api/content/chapters?book=${encodeURIComponent(
-                b.name,
-              )}&section=${encodeURIComponent(ch.title)}`,
-              { signal },
-            );
-            const chData = await chRes.json();
-            blocks.push(...(chData.content?.content || []));
-          }
-          const bookCount = searchInDocument({ content: blocks }, q).length;
-          list.push({ name: b.name, label, count: bookCount });
-          globalTotal += bookCount;
+      // Group matches by book
+      const matchesByBook = new Map();
+      for (const match of allBooks.matches || []) {
+        if (!matchesByBook.has(match.book)) {
+          matchesByBook.set(match.book, []);
         }
-        cached.global = { list, total: globalTotal };
-        lruSet(key, cached);
-      } else {
-        lruTouch(key);
+        matchesByBook.get(match.book).push(match);
       }
 
-      setBooksMatches(searchCache.get(key).global.list);
-      setTotalCount(searchCache.get(key).global.total);
+      // Build books list with counts
+      const tocRes = await fetch("/api/content/toc", { signal });
+      if (signal.aborted || requestId !== requestIdRef.current) return;
+      const toc = await tocRes.json();
+      if (signal.aborted || requestId !== requestIdRef.current) return;
+      const list = toc.map((b) => ({
+        name: b.name,
+        label: b.label || b.name,
+        count: matchesByBook.get(b.name)?.length || 0,
+      }));
 
-      const current = searchCache.get(key);
-      const bookKey = book || "__current__";
-      const currentVersion = getDocVersion(fullDoc);
-      const cachedBook = current.perBook.get(bookKey);
+      setBooksMatches(list);
+      setTotalCount(allBooks.matches?.length || 0);
 
-      let localMatches, localCount;
-      if (cachedBook && cachedBook.version === currentVersion) {
-        ({ matches: localMatches } = cachedBook);
-        localCount = cachedBook.count;
-      } else {
-        localMatches = searchInDocument(fullDoc, q);
-        localCount = localMatches.length;
-        current.perBook.set(bookKey, {
-          matches: localMatches,
-          count: localCount,
-          version: currentVersion,
-        });
-        lruSet(key, current);
-      }
-
-      if (localCount > 0) {
+      // Get matches for current book
+      const currentBookMatches = matchesByBook.get(book) || [];
+      
+      if (currentBookMatches.length > 0) {
         setCursor(0);
-        setMatches(localMatches);
-        setCount(localCount);
+        setMatches(currentBookMatches);
+        setCount(currentBookMatches.length);
       } else {
         setMatches(null);
         setCount(0);
-        setError("Ничего не найдено в текущей книге.");
+        if (book) {
+          setError("Ничего не найдено в текущей книге.");
+        }
       }
     } catch (err) {
-      console.error(err);
-      setError("Ошибка при поиске.");
+      if (err?.name !== "AbortError") {
+        console.error(err);
+        setError("Ошибка при поиске.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
