@@ -12,32 +12,147 @@ import MenuButton from "../MenuButtons";
 import useNearestHeadings from "@/hooks/useNearestHeadings";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
+function addIdsToHeadings(content) {
+  function extractText(node) {
+    if (!node) return "";
+    if (node.type === "text") return node.text || "";
+    if (Array.isArray(node.content)) {
+      return node.content.map(extractText).join("");
+    }
+    return "";
+  }
+
+  function traverse(node) {
+    if (!node || typeof node !== "object") return;
+
+    if (
+      node.type === "heading" &&
+      (node.attrs?.level === 1 || node.attrs?.level === 2)
+    ) {
+      const text = extractText(node);
+      const id = text;
+      node.attrs = { ...node.attrs, id };
+    }
+
+    if (Array.isArray(node.content)) {
+      node.content.forEach(traverse);
+    }
+  }
+
+  content.forEach(traverse);
+  return content;
+}
+
+function createLoadingDoc() {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Загрузка..." }],
+      },
+    ],
+  };
+}
+
+function buildPageUrl(book, page, pageSize) {
+  const params = new URLSearchParams();
+  params.set("book", book);
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  return `/api/content/book-pages?${params.toString()}`;
+}
+
 export default function Reader() {
   const router = useRouter();
   const pathname = usePathname();
   const containerRef = useRef(null);
 
   const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
-  const { editor, isLoaded, isReadyToScroll, setIsReadyToScroll } =
-    useBookEditor(book, edit, setBookLabel);
+  const { editor } = useBookEditor(edit);
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
+  const [pageDoc, setPageDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageBlockSize, setPageBlockSize] = useState(500);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalBlocks, setTotalBlocks] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isReadyToScroll, setIsReadyToScroll] = useState(false);
+  const [loadingBook, setLoadingBook] = useState(false);
+  const [loadingPage, setLoadingPage] = useState(false);
+  const [pageError, setPageError] = useState(null);
+
+  async function fetchPage(bookName, page, pageSize) {
+    const res = await fetch(buildPageUrl(bookName, page, pageSize), {
+      cache: "no-store",
+    });
+
+    if (res.status === 404) {
+      return null;
+    }
+
+    if (!res.ok) {
+      throw new Error("Failed to load page");
+    }
+
+    return res.json();
+  }
+
+  async function loadBookDocument() {
+    if (!book) return;
+    setLoadingBook(true);
+    setPageError(null);
+
+    try {
+      const payload = await fetchPage(book, 0, -1);
+      if (!payload) {
+        setFullDoc(null);
+        return;
+      }
+
+      const content = addIdsToHeadings(payload.pageContent?.content || []);
+      setFullDoc({ type: "doc", content });
+      setBookLabel(payload.label);
+      setTotalBlocks(payload.totalBlocks || content.length);
+      setTotalPages(payload.totalPages || 1);
+    } catch (error) {
+      console.error(error);
+      setPageError("Ошибка загрузки книги");
+    } finally {
+      setLoadingBook(false);
+    }
+  }
+
+  async function loadPageDocument(page, pageSize) {
+    if (!book) return;
+    setLoadingPage(true);
+    setPageError(null);
+
+    try {
+      const payload = await fetchPage(book, page, pageSize);
+      if (!payload) {
+        setPageDoc(null);
+        return;
+      }
+
+      const content = addIdsToHeadings(payload.pageContent?.content || []);
+      setPageDoc(content);
+      setTotalPages(payload.totalPages || totalPages);
+      setTotalBlocks(payload.totalBlocks || totalBlocks);
+      setBookLabel(payload.label);
+    } catch (error) {
+      console.error(error);
+      setPageError("Ошибка загрузки страницы");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
 
   function updateBlockSize(value) {
-    const newSize = parseInt(value);
+    const newSize = parseInt(value, 10);
     setPageBlockSize(newSize);
     setCurrentPage(0);
-
-    if (fullDoc && editor) {
-      const sliced = {
-        ...fullDoc,
-        content:
-          newSize === -1 ? fullDoc.content : fullDoc.content.slice(0, newSize),
-      };
-      editor.commands.setContent(sliced, false);
-    }
   }
 
   const pageLabel = pageBlockSize === -1 ? "Весь текст" : `${pageBlockSize}`;
@@ -59,6 +174,17 @@ export default function Reader() {
       editor.setEditable(edit);
     }
   }, [edit, editor]);
+
+  function scheduleSetContent(doc, replace = false) {
+    if (!editor) return;
+    Promise.resolve().then(() => {
+      try {
+        editor.commands.setContent(doc, replace);
+      } catch (e) {
+        console.error("setContent failed", e);
+      }
+    });
+  }
 
   function triggerHighlight() {
     setTrigger((prev) => !prev);
@@ -88,146 +214,85 @@ export default function Reader() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  async function save() {
-    if (!editor || !book || !fullDoc) return;
-    setIsReadyToScroll(false);
+  useEffect(() => {
+    if (!book) return;
+    setIsLoaded(false);
+    setFullDoc(null);
+    setPageDoc(null);
+    setCurrentPage(0);
+    setTotalPages(0);
+    setTotalBlocks(0);
+    setPageError(null);
+    loadBookDocument();
+  }, [book]);
 
-    const editedPageContent = editor.getJSON().content;
-    const pageStart = currentPage * pageBlockSize;
-    const pageEnd = pageStart + pageBlockSize;
-
-    const updatedFullDoc = {
-      ...fullDoc,
-      content: [...fullDoc.content.slice(0, pageStart), ...editedPageContent],
-    };
-
-    if (pageEnd > -1) {
-      updatedFullDoc.content.push(...fullDoc.content.slice(pageEnd));
-    }
-
-    const fullContent = updatedFullDoc;
-    const chapters = [];
-    let currentChapter = null;
-
-    for (const block of fullContent.content) {
-      if (block.type === "heading" && block.attrs?.level === 1) {
-        if (currentChapter) {
-          const res = await fetch("/api/content/chapters", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              book,
-              section: currentChapter.slug,
-              content: { type: "doc", content: currentChapter.content },
-            }),
-          });
-
-          const data = await res.json();
-          if (data.section) chapters.push(data.section);
-        }
-
-        currentChapter = {
-          slug: block.content?.[0]?.text || "glava",
-          content: [block],
-        };
-      } else if (currentChapter) {
-        currentChapter.content.push(block);
-      }
-    }
-
-    if (currentChapter) {
-      const res = await fetch("/api/content/chapters", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          book,
-          section: currentChapter.slug,
-          content: { type: "doc", content: currentChapter.content },
-        }),
-      });
-
-      const data = await res.json();
-      if (data.section) chapters.push(data.section);
-    }
-
-    const update = await fetch("/api/content/books", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ book, chapters }),
-    });
-
-    if (!update.ok) {
-      alert("Ошибка при сохранении книги");
-    } else {
-      setFullDoc(updatedFullDoc);
-      alert("Сохранено успешно!");
-    }
-  }
-
-  async function reloadCurrentBook() {
-    if (!book || !editor) return;
-
-    const metaRes = await fetch(
-      `/api/content/books?book=${encodeURIComponent(book)}`,
-      {
-        cache: "no-store",
-      },
-    );
-
-    if (!metaRes.ok) {
-      throw new Error("Не удалось загрузить метаданные книги");
-    }
-
-    const meta = await metaRes.json();
-    const chapters = meta.chapters || [];
-
-    const blocks = [];
-
-    for (const ch of chapters) {
-      const chRes = await fetch(
-        `/api/content/chapters?book=${encodeURIComponent(book)}&section=${encodeURIComponent(ch.title)}`,
-        {
-          cache: "no-store",
-        },
-      );
-
-      if (!chRes.ok) {
-        continue;
-      }
-
-      const chData = await chRes.json();
-      blocks.push(...(chData.content?.content || []));
-    }
-
-    const freshDoc = {
-      type: "doc",
-      content: blocks,
-    };
-
-    setFullDoc(freshDoc);
+  useEffect(() => {
+    if (!book) return;
 
     if (pageBlockSize === -1) {
       setCurrentPage(0);
-      editor.commands.setContent(freshDoc, false);
+      loadPageDocument(0, -1);
       return;
     }
 
-    const maxPage = Math.max(
-      0,
-      Math.ceil(freshDoc.content.length / pageBlockSize) - 1,
-    );
-    const nextPage = Math.min(currentPage, maxPage);
-    const sliceStart = nextPage * pageBlockSize;
-    const sliceEnd = sliceStart + pageBlockSize;
+    loadPageDocument(currentPage, pageBlockSize);
+  }, [book, currentPage, pageBlockSize]);
 
-    setCurrentPage(nextPage);
-    editor.commands.setContent(
-      {
-        ...freshDoc,
-        content: freshDoc.content.slice(sliceStart, sliceEnd),
-      },
-      false,
-    );
+  useEffect(() => {
+    if (!book || pageBlockSize !== -1 || currentPage !== 0) return;
+    loadPageDocument(0, -1);
+  }, [book, pageBlockSize, currentPage]);
+
+  useEffect(() => {
+    if (!editor) return;
+    if (loadingBook || loadingPage) {
+      scheduleSetContent(createLoadingDoc(), false);
+      return;
+    }
+    if (pageDoc) {
+      scheduleSetContent({ type: "doc", content: pageDoc }, false);
+      setIsLoaded(true);
+      setIsReadyToScroll(true);
+    }
+  }, [editor, pageDoc, loadingBook, loadingPage]);
+
+  async function save() {
+    if (!editor || !book || !pageDoc) return;
+    setIsReadyToScroll(false);
+
+    const editedPageContent = editor.getJSON().content;
+    const res = await fetch("/api/content/book-pages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        book,
+        page: currentPage,
+        pageSize: pageBlockSize,
+        content: editedPageContent,
+      }),
+    });
+
+    if (!res.ok) {
+      alert("Ошибка при сохранении страницы");
+      return;
+    }
+
+    await loadBookDocument();
+    if (pageBlockSize !== -1) {
+      await loadPageDocument(currentPage, pageBlockSize);
+    }
+
+    alert("Сохранено успешно!");
+  }
+
+  async function reloadCurrentBook() {
+    if (!book) return;
+    setPageError(null);
+
+    await loadBookDocument();
+    if (pageBlockSize !== -1) {
+      await loadPageDocument(currentPage, pageBlockSize);
+    }
   }
 
   function highlight(start, end) {
@@ -237,62 +302,53 @@ export default function Reader() {
   }
 
   function goToPage(page) {
-    if (!fullDoc || !editor || pageBlockSize === -1) return;
-
-    const start = page * pageBlockSize;
-    const end = pageBlockSize === -1 ? undefined : start + pageBlockSize;
-    const sliced = {
-      ...fullDoc,
-      content: fullDoc.content.slice(start, end),
-    };
-
+    if (!editor || page < 0) return;
     setCurrentPage(page);
-    editor.commands.setContent(sliced, false);
   }
 
   function goToMatch(match) {
     if (!fullDoc || !editor) return;
 
-    if (pageBlockSize === -1) {
-      setCurrentPage(0);
-      editor.commands.setContent(fullDoc, false);
+      if (pageBlockSize === -1) {
+        setCurrentPage(0);
+        scheduleSetContent(fullDoc, false);
+
+        setTimeout(() => {
+          const relativePos = getRelativePositionInSlice(
+            fullDoc,
+            match.blockIndex,
+            match.childIndexPath,
+            match.charIndex,
+          );
+          highlight(relativePos, relativePos + match.length);
+        }, 0);
+
+        return;
+      }
+
+      const pageIndex = Math.floor(match.blockIndex / pageBlockSize);
+      const sliceStart = pageIndex * pageBlockSize;
+      const sliceEnd = sliceStart + pageBlockSize;
+      const sliced = {
+        ...fullDoc,
+        content: fullDoc.content.slice(sliceStart, sliceEnd),
+      };
 
       setTimeout(() => {
-        const relativePos = getRelativePositionInSlice(
-          fullDoc,
-          match.blockIndex,
-          match.childIndexPath,
-          match.charIndex,
-        );
-        highlight(relativePos, relativePos + match.length);
+        setCurrentPage(pageIndex);
+        scheduleSetContent(sliced, false);
+
+        setTimeout(() => {
+          const localBlockIndex = match.blockIndex % pageBlockSize;
+          const relativePos = getRelativePositionInSlice(
+            sliced,
+            localBlockIndex,
+            match.childIndexPath,
+            match.charIndex,
+          );
+          highlight(relativePos, relativePos + match.length);
+        }, 0);
       }, 0);
-
-      return;
-    }
-
-    const pageIndex = Math.floor(match.blockIndex / pageBlockSize);
-    const sliceStart = pageIndex * pageBlockSize;
-    const sliceEnd = sliceStart + pageBlockSize;
-    const sliced = {
-      ...fullDoc,
-      content: fullDoc.content.slice(sliceStart, sliceEnd),
-    };
-
-    setTimeout(() => {
-      setCurrentPage(pageIndex);
-      editor.commands.setContent(sliced, false);
-
-      setTimeout(() => {
-        const localBlockIndex = match.blockIndex % pageBlockSize;
-        const relativePos = getRelativePositionInSlice(
-          sliced,
-          localBlockIndex,
-          match.childIndexPath,
-          match.charIndex,
-        );
-        highlight(relativePos, relativePos + match.length);
-      }, 0);
-    }, 0);
   }
 
   useEffect(() => {
@@ -309,20 +365,6 @@ export default function Reader() {
   }, [start, end, trigger, editor]);
 
   useEffect(() => {
-    if (!isLoaded || !editor) return;
-
-    const json = editor.getJSON();
-    setFullDoc(json);
-
-    const slice = {
-      ...json,
-      content: json.content.slice(0, pageBlockSize),
-    };
-
-    editor.commands.setContent(slice, false);
-  }, [editor, isLoaded, pageBlockSize]);
-
-  useEffect(() => {
     function goToBlockId(id) {
       if (!fullDoc || !Array.isArray(fullDoc.content) || !editor || !id) return;
 
@@ -333,7 +375,7 @@ export default function Reader() {
 
       if (pageBlockSize === -1) {
         setCurrentPage(0);
-        editor.commands.setContent(fullDoc, false);
+        scheduleSetContent(fullDoc, false);
 
         waitForElement(`#${CSS.escape(id)}`, 5000, 100).then((el) => {
           if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -352,7 +394,7 @@ export default function Reader() {
       setCurrentPage(pageIndex);
 
       setTimeout(() => {
-        editor.commands.setContent(sliced, false);
+        scheduleSetContent(sliced, false);
       }, 0);
 
       waitForElement(`#${CSS.escape(id)}`, 5000, 100).then((el) => {
@@ -369,7 +411,7 @@ export default function Reader() {
 
       if (pageBlockSize === -1) {
         setCurrentPage(0);
-        editor.commands.setContent(fullDoc, false);
+        scheduleSetContent(fullDoc, false);
 
         waitForElement(`#${CSS.escape(anchorId)}`, 5000, 100).then((el) => {
           if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -388,7 +430,7 @@ export default function Reader() {
       setCurrentPage(pageIndex);
 
       setTimeout(() => {
-        editor.commands.setContent(sliced, false);
+        scheduleSetContent(sliced, false);
       }, 0);
 
       waitForElement(`#${CSS.escape(anchorId)}`, 5000, 100).then((el) => {
@@ -424,12 +466,6 @@ export default function Reader() {
     fullDoc,
     pageBlockSize,
   ]);
-
-  const totalPages = fullDoc
-    ? pageBlockSize === -1
-      ? 1
-      : Math.ceil(fullDoc.content.length / pageBlockSize)
-    : 0;
 
   useEffect(() => {
     const root = containerRef.current;

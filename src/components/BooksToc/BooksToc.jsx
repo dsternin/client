@@ -115,9 +115,9 @@ export default function BooksToc() {
                         {ch.points?.length > 0 && (
                           <AccordionDetails sx={{ pl: 1 }}>
                             <List dense>
-                              {ch.points.map((pt) => (
+                              {ch.points.map((pt, ptIndex) => (
                                 <Link
-                                  key={pt.title}
+                                  key={`${book.name}-${ch.title}-${pt.title}-${ptIndex}`}
                                   href={{
                                     pathname: "/reader",
                                     query: {
