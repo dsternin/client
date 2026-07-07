@@ -100,31 +100,6 @@ export default function Reader() {
     return res.json();
   }
 
-  async function loadBookDocument() {
-    if (!book) return;
-    setLoadingBook(true);
-    setPageError(null);
-
-    try {
-      const payload = await fetchPage(book, 0, -1);
-      if (!payload) {
-        setFullDoc(null);
-        return;
-      }
-
-      const content = addIdsToHeadings(payload.pageContent?.content || []);
-      setFullDoc({ type: "doc", content });
-      setBookLabel(payload.label);
-      setTotalBlocks(payload.totalBlocks || content.length);
-      setTotalPages(payload.totalPages || 1);
-    } catch (error) {
-      console.error(error);
-      setPageError("Ошибка загрузки книги");
-    } finally {
-      setLoadingBook(false);
-    }
-  }
-
   async function loadPageDocument(page, pageSize) {
     if (!book) return;
     const requestId = ++pageRequestIdRef.current;
@@ -168,8 +143,27 @@ export default function Reader() {
   const [end, setEnd] = useState();
   const [trigger, setTrigger] = useState(false);
   const [pendingMatch, setPendingMatch] = useState(null);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
   const [pageAppliedRevision, setPageAppliedRevision] = useState(0);
   const pageRequestIdRef = useRef(0);
+
+  async function resolveNavigationPage({ section, point, anchor }) {
+    if (!book) return null;
+
+    const params = new URLSearchParams();
+    params.set("book", book);
+    params.set("pageSize", String(pageBlockSize));
+    if (anchor) params.set("anchor", anchor);
+    else if (point) params.set("point", point);
+    else if (section) params.set("section", section);
+
+    const res = await fetch(`/api/content/book-pages?${params.toString()}`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) return null;
+    return res.json();
+  }
 
   const searchParams = useSearchParams();
 
@@ -233,11 +227,11 @@ export default function Reader() {
     setPageDoc(null);
     setLoadedPage(null);
     setPendingMatch(null);
+    setPendingNavigation(null);
     setCurrentPage(0);
     setTotalPages(0);
     setTotalBlocks(0);
     setPageError(null);
-    loadBookDocument();
   }, [book]);
 
   useEffect(() => {
@@ -267,6 +261,8 @@ export default function Reader() {
       scheduleSetContent({ type: "doc", content: pageDoc }, false, () => {
         setPageAppliedRevision((prev) => prev + 1);
       });
+      // Keep fullDoc in sync with currently loaded page to avoid eager full-book fetch.
+      setFullDoc({ type: "doc", content: pageDoc });
       setIsLoaded(true);
       setIsReadyToScroll(true);
     }
@@ -276,7 +272,10 @@ export default function Reader() {
     if (!editor || !book || !pageDoc) return;
     setIsReadyToScroll(false);
 
-    const editedPageContent = editor.getJSON().content;
+    let editedPageContent = editor.getJSON().content;
+    // Ensure all headings have IDs before saving
+    editedPageContent = addIdsToHeadings(editedPageContent);
+
     const res = await fetch("/api/content/book-pages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -293,10 +292,7 @@ export default function Reader() {
       return;
     }
 
-    await loadBookDocument();
-    if (pageBlockSize !== -1) {
-      await loadPageDocument(currentPage, pageBlockSize);
-    }
+    await loadPageDocument(currentPage, pageBlockSize);
 
     alert("Сохранено успешно!");
   }
@@ -305,10 +301,7 @@ export default function Reader() {
     if (!book) return;
     setPageError(null);
 
-    await loadBookDocument();
-    if (pageBlockSize !== -1) {
-      await loadPageDocument(currentPage, pageBlockSize);
-    }
+    await loadPageDocument(currentPage, pageBlockSize);
   }
 
   function highlight(start, end) {
@@ -397,80 +390,7 @@ export default function Reader() {
   }, [start, end, trigger, editor]);
 
   useEffect(() => {
-    function goToBlockId(id) {
-      if (!fullDoc || !Array.isArray(fullDoc.content) || !editor || !id) return;
-
-      const index = fullDoc.content.findIndex(
-        (block) => block.attrs?.id === id,
-      );
-      if (index === -1) return;
-
-      if (pageBlockSize === -1) {
-        setCurrentPage(0);
-        scheduleSetContent(fullDoc, false);
-
-        waitForElement(`#${CSS.escape(id)}`, 5000, 100).then((el) => {
-          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-        });
-        return;
-      }
-
-      const pageIndex = Math.floor(index / pageBlockSize);
-      const sliceStart = pageIndex * pageBlockSize;
-      const sliceEnd = sliceStart + pageBlockSize;
-      const sliced = {
-        ...fullDoc,
-        content: fullDoc.content.slice(sliceStart, sliceEnd),
-      };
-
-      setCurrentPage(pageIndex);
-
-      setTimeout(() => {
-        scheduleSetContent(sliced, false);
-      }, 0);
-
-      waitForElement(`#${CSS.escape(id)}`, 5000, 100).then((el) => {
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    }
-
-    function goToAnchor(anchorId) {
-      if (!fullDoc || !Array.isArray(fullDoc.content) || !editor || !anchorId)
-        return;
-
-      const index = findAnchorBlockIndex(fullDoc, anchorId);
-      if (index === -1) return;
-
-      if (pageBlockSize === -1) {
-        setCurrentPage(0);
-        scheduleSetContent(fullDoc, false);
-
-        waitForElement(`#${CSS.escape(anchorId)}`, 5000, 100).then((el) => {
-          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-        });
-        return;
-      }
-
-      const pageIndex = Math.floor(index / pageBlockSize);
-      const sliceStart = pageIndex * pageBlockSize;
-      const sliceEnd = sliceStart + pageBlockSize;
-      const sliced = {
-        ...fullDoc,
-        content: fullDoc.content.slice(sliceStart, sliceEnd),
-      };
-
-      setCurrentPage(pageIndex);
-
-      setTimeout(() => {
-        scheduleSetContent(sliced, false);
-      }, 0);
-
-      waitForElement(`#${CSS.escape(anchorId)}`, 5000, 100).then((el) => {
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    }
-
-    if (!isLoaded || !editor || !fullDoc) return;
+    if (!isLoaded || !editor) return;
     if (!initialSection && !initialPoint && !initialAnchor) return;
 
     setStart(NaN);
@@ -479,15 +399,29 @@ export default function Reader() {
 
     if (!isReadyToScroll) return;
 
-    if (initialAnchor) {
-      goToAnchor(initialAnchor);
-      return;
-    }
+    let cancelled = false;
 
-    const targetId = initialPoint || initialSection;
-    if (targetId) {
-      goToBlockId(targetId);
-    }
+    (async () => {
+      const payload = await resolveNavigationPage({
+        section: initialSection,
+        point: initialPoint,
+        anchor: initialAnchor,
+      });
+      if (cancelled || !payload?.resolved?.found) return;
+
+      const targetPage = payload.resolved.page;
+      const targetType = payload.resolved.type;
+      const targetValue = payload.resolved.value;
+
+      if (typeof targetPage === "number") {
+        setPendingNavigation({ page: targetPage, type: targetType, value: targetValue });
+        setCurrentPage(targetPage);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     editor,
     isLoaded,
@@ -495,9 +429,21 @@ export default function Reader() {
     initialSection,
     initialAnchor,
     isReadyToScroll,
-    fullDoc,
+    book,
     pageBlockSize,
   ]);
+
+  useEffect(() => {
+    if (!pendingNavigation || loadingBook || loadingPage) return;
+    if (loadedPage !== pendingNavigation.page) return;
+
+    waitForElement(`#${CSS.escape(pendingNavigation.value)}`, 5000, 100).then((el) => {
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setPendingNavigation(null);
+    });
+  }, [pendingNavigation, loadedPage, loadingBook, loadingPage, pageAppliedRevision]);
 
   useEffect(() => {
     const root = containerRef.current;
@@ -687,7 +633,7 @@ function getRelativePositionInEditorDoc(
       childOffset += currentNode.child(i).nodeSize;
     }
 
-    currentStart = currentStart + 1 + childOffset;
+    currentStart = currentStart + childOffset;
     currentNode = currentNode.child(idx);
   }
 

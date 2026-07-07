@@ -117,13 +117,13 @@ export default function BooksToc() {
                             <List dense>
                               {ch.points.map((pt, ptIndex) => (
                                 <Link
-                                  key={`${book.name}-${ch.title}-${pt.title}-${ptIndex}`}
+                                  key={`${book.name}-${ch.title}-${pt.id}-${ptIndex}`}
                                   href={{
                                     pathname: "/reader",
                                     query: {
                                       book: book.name,
                                       section: ch.title,
-                                      point: pt.title,
+                                      point: pt.id,
                                     },
                                   }}
                                   passHref

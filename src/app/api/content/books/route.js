@@ -53,6 +53,14 @@ export async function getBookChaptersWithTitles(bookDoc) {
   return result;
 }
 
+export function clearChapterCache(bookName) {
+  if (bookName) {
+    chapterCache.delete(bookName);
+  } else {
+    chapterCache.clear();
+  }
+}
+
 export async function GET(req) {
   try {
     await dbConnect();
@@ -112,8 +120,10 @@ function extractH2FromTipTap(content) {
 
     if (node.type === "heading" && node.attrs?.level === 2) {
       const text = extractText(node);
+      const id = node.attrs?.id || text;
       points.push({
         title: text,
+        id: id,
       });
     }
 

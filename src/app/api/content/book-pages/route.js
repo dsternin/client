@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
-import { BookSchema } from "../books/route";
+import { BookSchema, clearChapterCache } from "../books/route";
 import {
   loadChapter,
   saveChapter,
@@ -83,6 +83,61 @@ function sliceBookBlocks(chapters, start, end) {
   return pageBlocks;
 }
 
+function blockContainsAnchor(node, anchorId) {
+  if (!node || !anchorId) return false;
+
+  if (Array.isArray(node)) {
+    return node.some((child) => blockContainsAnchor(child, anchorId));
+  }
+
+  if (typeof node !== "object") return false;
+
+  if (Array.isArray(node.marks)) {
+    const hasAnchor = node.marks.some(
+      (mark) => mark?.type === "anchor" && mark?.attrs?.anchorId === anchorId,
+    );
+    if (hasAnchor) return true;
+  }
+
+  if (Array.isArray(node.content)) {
+    return node.content.some((child) => blockContainsAnchor(child, anchorId));
+  }
+
+  return false;
+}
+
+function findHeadingBlockIndex(chapters, headingId) {
+  let offset = 0;
+
+  for (const chapter of chapters) {
+    for (let i = 0; i < chapter.length; i++) {
+      const block = chapter.content[i];
+      if (block?.attrs?.id === headingId) {
+        return offset + i;
+      }
+    }
+    offset += chapter.length;
+  }
+
+  return -1;
+}
+
+function findAnchorBlockIndex(chapters, anchorId) {
+  let offset = 0;
+
+  for (const chapter of chapters) {
+    for (let i = 0; i < chapter.length; i++) {
+      const block = chapter.content[i];
+      if (blockContainsAnchor(block, anchorId)) {
+        return offset + i;
+      }
+    }
+    offset += chapter.length;
+  }
+
+  return -1;
+}
+
 async function updateBookPage(bookName, page, pageSize, pageContent) {
   const bookDoc = await Book.findOne({ name: bookName });
   if (!bookDoc) {
@@ -111,8 +166,13 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
 
         const slug = block.content?.[0]?.text || "chapter";
         currentChapter = { slug, content: [block] };
-      } else if (currentChapter) {
-        currentChapter.content.push(block);
+      } else {
+        // If no chapter started yet, create a default one
+        if (!currentChapter) {
+          currentChapter = { slug: "intro", content: [block] };
+        } else {
+          currentChapter.content.push(block);
+        }
       }
     }
 
@@ -255,6 +315,9 @@ export async function GET(req) {
     const bookName = searchParams.get("book");
     const page = parseInteger(searchParams.get("page"), 0);
     const pageSize = parseInteger(searchParams.get("pageSize"), DEFAULT_PAGE_SIZE);
+    const anchor = searchParams.get("anchor");
+    const point = searchParams.get("point");
+    const section = searchParams.get("section");
 
     if (!bookName) {
       return NextResponse.json(
@@ -275,19 +338,58 @@ export async function GET(req) {
       ? 1
       : Math.max(1, Math.ceil(totalBlocks / normalizedPageSize));
 
+    let resolvedType = null;
+    let resolvedValue = null;
+    let resolvedBlockIndex = -1;
+
+    if (anchor) {
+      resolvedType = "anchor";
+      resolvedValue = anchor;
+      resolvedBlockIndex = findAnchorBlockIndex(chapters, anchor);
+    } else if (point) {
+      resolvedType = "point";
+      resolvedValue = point;
+      resolvedBlockIndex = findHeadingBlockIndex(chapters, point);
+    } else if (section) {
+      resolvedType = "section";
+      resolvedValue = section;
+      resolvedBlockIndex = findHeadingBlockIndex(chapters, section);
+    }
+
+    const resolvedPage = resolvedBlockIndex >= 0 && normalizedPageSize !== -1
+      ? Math.floor(resolvedBlockIndex / normalizedPageSize)
+      : (normalizedPageSize === -1 ? 0 : page);
+
+    const safePage = normalizedPageSize === -1
+      ? 0
+      : Math.max(0, Math.min(resolvedPage, Math.max(0, totalPages - 1)));
+
     const content =
       normalizedPageSize === -1
         ? chapters.flatMap((chapter) => chapter.content)
-        : sliceBookBlocks(chapters, page * normalizedPageSize, page * normalizedPageSize + normalizedPageSize);
+        : sliceBookBlocks(
+            chapters,
+            safePage * normalizedPageSize,
+            safePage * normalizedPageSize + normalizedPageSize,
+          );
 
     return NextResponse.json({
       name: bookDoc.name,
       label: bookDoc.label,
       totalBlocks,
-      page: normalizedPageSize === -1 ? 0 : page,
+      page: normalizedPageSize === -1 ? 0 : safePage,
       pageSize: normalizedPageSize,
       totalPages,
       pageContent: createDocument(content),
+      resolved: resolvedType
+        ? {
+            type: resolvedType,
+            value: resolvedValue,
+            found: resolvedBlockIndex >= 0,
+            blockIndex: resolvedBlockIndex,
+            page: normalizedPageSize === -1 ? 0 : safePage,
+          }
+        : null,
     });
   } catch (error) {
     console.error(error);
@@ -317,6 +419,8 @@ export async function POST(req) {
 
     const normalizedPageSize = pageSize === -1 ? -1 : Math.max(1, parseInteger(pageSize, DEFAULT_PAGE_SIZE));
     const updatedSections = await updateBookPage(book, page, normalizedPageSize, content);
+
+    clearChapterCache(book);
 
     return NextResponse.json({ ok: true, updatedSections });
   } catch (error) {
