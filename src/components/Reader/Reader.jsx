@@ -73,6 +73,7 @@ export default function Reader() {
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [pageDoc, setPageDoc] = useState(null);
+  const [pageContext, setPageContext] = useState({ section: "", point: "" });
   const [loadedPage, setLoadedPage] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageBlockSize, setPageBlockSize] = useState(500);
@@ -111,12 +112,14 @@ export default function Reader() {
       if (requestId !== pageRequestIdRef.current) return;
       if (!payload) {
         setPageDoc(null);
+        setPageContext({ section: "", point: "" });
         setLoadedPage(null);
         return;
       }
 
       const content = addIdsToHeadings(payload.pageContent?.content || []);
       setPageDoc(content);
+      setPageContext(payload.pageContext || { section: "", point: "" });
       setLoadedPage(page);
       setTotalPages(payload.totalPages || totalPages);
       setTotalBlocks(payload.totalBlocks || totalBlocks);
@@ -171,7 +174,7 @@ export default function Reader() {
   const initialPoint = searchParams.get("point");
   const initialAnchor = searchParams.get("anchor");
 
-  useNearestHeadings(setSection, setPoint, fullDoc, currentPage, pageBlockSize);
+  useNearestHeadings(setSection, setPoint, fullDoc, pageContext);
 
   useEffect(() => {
     if (editor) {
@@ -225,6 +228,7 @@ export default function Reader() {
     pageRequestIdRef.current += 1;
     setFullDoc(null);
     setPageDoc(null);
+    setPageContext({ section: "", point: "" });
     setLoadedPage(null);
     setPendingMatch(null);
     setPendingNavigation(null);
@@ -412,9 +416,15 @@ export default function Reader() {
       const targetPage = payload.resolved.page;
       const targetType = payload.resolved.type;
       const targetValue = payload.resolved.value;
+      const targetBlockIndex = payload.resolved.blockIndex;
 
       if (typeof targetPage === "number") {
-        setPendingNavigation({ page: targetPage, type: targetType, value: targetValue });
+        setPendingNavigation({
+          page: targetPage,
+          type: targetType,
+          value: targetValue,
+          blockIndex: targetBlockIndex,
+        });
         setCurrentPage(targetPage);
       }
     })();
@@ -436,6 +446,22 @@ export default function Reader() {
   useEffect(() => {
     if (!pendingNavigation || loadingBook || loadingPage) return;
     if (loadedPage !== pendingNavigation.page) return;
+
+    if (
+      Number.isInteger(pendingNavigation.blockIndex) &&
+      pendingNavigation.type !== "anchor"
+    ) {
+      const localBlockIndex =
+        pageBlockSize === -1
+          ? pendingNavigation.blockIndex
+          : pendingNavigation.blockIndex - pendingNavigation.page * pageBlockSize;
+
+      const centered = centerViewportOnBlock(editor, localBlockIndex);
+      if (centered) {
+        setPendingNavigation(null);
+        return;
+      }
+    }
 
     waitForElement(`#${CSS.escape(pendingNavigation.value)}`, 5000, 100).then((el) => {
       if (el) {
@@ -659,6 +685,17 @@ function clampHighlightRange(doc, from, length) {
   return { from: safeFrom, to: safeTo };
 }
 
+function getBlockStartPosition(doc, blockIndex) {
+  if (!doc || blockIndex < 0 || blockIndex >= doc.childCount) return NaN;
+
+  let pos = 1;
+  for (let i = 0; i < blockIndex; i++) {
+    pos += doc.child(i).nodeSize;
+  }
+
+  return pos;
+}
+
 function centerViewportOnEditorRange(editor, from, to) {
   try {
     const view = editor?.view;
@@ -675,6 +712,27 @@ function centerViewportOnEditorRange(editor, from, to) {
     const midY = (head.top + tail.bottom) / 2;
 
     const targetTop = Math.max(0, midY + window.scrollY - window.innerHeight / 2);
+    window.scrollTo({ top: targetTop, behavior: "smooth" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function centerViewportOnBlock(editor, blockIndex) {
+  try {
+    const view = editor?.view;
+    const doc = view?.state?.doc;
+    if (!view || !doc) return false;
+
+    const pos = getBlockStartPosition(doc, blockIndex);
+    if (!Number.isFinite(pos)) return false;
+
+    const coords = view.coordsAtPos(pos);
+    const targetTop = Math.max(
+      0,
+      coords.top + window.scrollY - window.innerHeight / 2,
+    );
     window.scrollTo({ top: targetTop, behavior: "smooth" });
     return true;
   } catch {

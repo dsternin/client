@@ -19,8 +19,7 @@ export default function useNearestHeadings(
   setSection,
   setPoint,
   fullDoc,
-  currentPage,
-  pageBlockSize,
+  pageContext,
   { syncUrl = true } = {}
 ) {
   const rafRef = useRef(null);
@@ -65,11 +64,8 @@ export default function useNearestHeadings(
     const idxMap1 = Object.fromEntries(heads1.map((h) => [h.id, h.blockIndex]));
     const idxMap2 = Object.fromEntries(heads2.map((h) => [h.id, h.blockIndex]));
 
-    const allText = pageBlockSize === -1 || pageBlockSize === Infinity;
-    const pageStart = allText ? 0 : currentPage * pageBlockSize;
-    const pageEnd = allText
-      ? Number.POSITIVE_INFINITY
-      : pageStart + pageBlockSize;
+    const fallbackSection = pageContext?.section || "";
+    const fallbackPoint = pageContext?.point || "";
 
     const getOwnerH1 = (blockIndex) => {
       let owner = null;
@@ -88,43 +84,12 @@ export default function useNearestHeadings(
       return null;
     };
 
-    const lastH1BeforePage = () => {
-      let res = null;
-      for (let i = 0; i < heads1.length; i++) {
-        if (heads1[i].blockIndex < pageStart) res = heads1[i];
-        else break;
-      }
-      return res;
-    };
-
-    const lastH2InRangeBeforePageStart = (h1) => {
-      if (!h1) return null;
-      const next = getNextH1After(h1);
-      const upper = Math.min(
-        next ? next.blockIndex : Number.POSITIVE_INFINITY,
-        pageStart
-      );
-      let best = null;
-      for (let i = 0; i < heads2.length; i++) {
-        const h2 = heads2[i];
-        if (h2.blockIndex >= h1.blockIndex && h2.blockIndex < upper) {
-          if (!best || h2.blockIndex > best.blockIndex) best = h2;
-        }
-        if (h2.blockIndex >= upper) break;
-      }
-      return best;
-    };
-
     function updateOnScroll() {
       const centerY = window.innerHeight / 2;
       const domH1 = Array.from(document.querySelectorAll("h1[id]"));
       const domH2 = Array.from(document.querySelectorAll("h2[id]"));
 
       const visibleH1 = domH1
-        .filter((el) => {
-          const idx = idxMap1[el.id];
-          return idx >= pageStart && idx < pageEnd;
-        })
         .map((el) => ({ el, top: el.getBoundingClientRect().top }))
         .filter((item) => item.top < centerY)
         .sort((a, b) => b.top - a.top);
@@ -138,16 +103,12 @@ export default function useNearestHeadings(
         nextSection = nearestH1El.id;
 
         const nextH1El = domH1
-          .filter((el) => {
-            const idx = idxMap1[el.id];
-            return idx >= pageStart && idx < pageEnd;
-          })
           .find((el) => idxMap1[el.id] > nearestH1Idx);
 
         const visibleH2 = domH2
           .filter((el) => {
             const idx = idxMap2[el.id];
-            if (idx < pageStart || idx >= pageEnd) return false;
+            if (typeof idx !== "number") return false;
             const rect = el.getBoundingClientRect();
             if (rect.top >= centerY) return false;
             if (
@@ -175,17 +136,11 @@ export default function useNearestHeadings(
         if (visibleH2.length) {
           nextPoint = visibleH2[0].id || "";
         } else {
-          const h1Meta =
-            heads1.find((h) => h.id === nextSection) ||
-            getOwnerH1(nearestH1Idx);
-          const fallbackH2 = lastH2InRangeBeforePageStart(h1Meta);
-          nextPoint = fallbackH2 ? fallbackH2.id : "";
+          nextPoint = fallbackSection === nextSection ? fallbackPoint : "";
         }
       } else {
         const visibleH2Only = domH2
           .filter((el) => {
-            const idx = idxMap2[el.id];
-            if (idx < pageStart || idx >= pageEnd) return false;
             const rect = el.getBoundingClientRect();
             return rect.top < centerY;
           })
@@ -197,14 +152,12 @@ export default function useNearestHeadings(
         if (visibleH2Only.length) {
           const h2El = visibleH2Only[0];
           const h2Idx = idxMap2[h2El.id];
-          const ownerH1 = getOwnerH1(h2Idx) || lastH1BeforePage();
-          nextSection = ownerH1?.id || "";
+          const ownerH1 = getOwnerH1(h2Idx);
+          nextSection = ownerH1?.id || fallbackSection;
           nextPoint = h2El.id;
         } else {
-          const h1Prev = lastH1BeforePage();
-          nextSection = h1Prev?.id || "";
-          const h2Prev = lastH2InRangeBeforePageStart(h1Prev);
-          nextPoint = h2Prev ? h2Prev.id : "";
+          nextSection = fallbackSection;
+          nextPoint = fallbackPoint;
         }
       }
 
@@ -222,5 +175,5 @@ export default function useNearestHeadings(
     return () => {
       window.removeEventListener("scroll", onScroll);
     };
-  }, [setSection, setPoint, fullDoc, currentPage, pageBlockSize, syncUrl]);
+  }, [setSection, setPoint, fullDoc, pageContext, syncUrl]);
 }

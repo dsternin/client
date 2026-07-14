@@ -21,6 +21,15 @@ function createDocument(content) {
   return { type: "doc", content };
 }
 
+function extractText(node) {
+  if (!node) return "";
+  if (node.type === "text") return node.text || "";
+  if (Array.isArray(node.content)) {
+    return node.content.map(extractText).join("");
+  }
+  return "";
+}
+
 async function readBookChapters(bookName) {
   const bookDoc = await Book.findOne({ name: bookName });
   if (!bookDoc) return null;
@@ -136,6 +145,36 @@ function findAnchorBlockIndex(chapters, anchorId) {
   }
 
   return -1;
+}
+
+function getHeadingId(block) {
+  return block?.attrs?.id || extractText(block);
+}
+
+function getPageContext(chapters, blockIndex) {
+  let offset = 0;
+  let section = "";
+  let point = "";
+
+  for (const chapter of chapters) {
+    for (let i = 0; i < chapter.length; i++) {
+      const globalIndex = offset + i;
+      if (globalIndex >= blockIndex) {
+        return { section, point };
+      }
+
+      const block = chapter.content[i];
+      if (block?.type === "heading" && block?.attrs?.level === 1) {
+        section = getHeadingId(block);
+        point = "";
+      } else if (block?.type === "heading" && block?.attrs?.level === 2) {
+        point = getHeadingId(block);
+      }
+    }
+    offset += chapter.length;
+  }
+
+  return { section, point };
 }
 
 async function updateBookPage(bookName, page, pageSize, pageContent) {
@@ -363,6 +402,8 @@ export async function GET(req) {
     const safePage = normalizedPageSize === -1
       ? 0
       : Math.max(0, Math.min(resolvedPage, Math.max(0, totalPages - 1)));
+    const pageStartIndex = normalizedPageSize === -1 ? 0 : safePage * normalizedPageSize;
+    const pageContext = getPageContext(chapters, pageStartIndex);
 
     const content =
       normalizedPageSize === -1
@@ -380,6 +421,7 @@ export async function GET(req) {
       page: normalizedPageSize === -1 ? 0 : safePage,
       pageSize: normalizedPageSize,
       totalPages,
+      pageContext,
       pageContent: createDocument(content),
       resolved: resolvedType
         ? {
