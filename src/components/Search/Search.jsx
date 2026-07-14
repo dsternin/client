@@ -404,10 +404,17 @@ export default function Search({
               fullWidth
               size="small"
               autoComplete="off"
-              InputLabelProps={{
-                sx: {
-                  color: "#b81414",
-                  fontWeight: 600,
+              sx={{
+                "& .MuiInputBase-input": {
+                  fontWeight: 700,
+                },
+              }}
+              slotProps={{
+                inputLabel: {
+                  sx: {
+                    color: "#b81414",
+                    fontWeight: 600,
+                  },
                 },
               }}
             />
