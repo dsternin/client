@@ -67,13 +67,21 @@ export default function Search({
   const abortRef = useRef(null);
   const requestIdRef = useRef(0);
 
+  const scheduleEditorCommand = (command) => {
+    Promise.resolve().then(() => {
+      try {
+        command?.();
+      } catch {}
+    });
+  };
+
   const collapseSelection = () => {
-    try {
+    scheduleEditorCommand(() => {
       const to = editor?.state?.selection?.to;
       if (typeof to === "number") {
         editor.commands.setTextSelection({ from: to, to });
       }
-    } catch {}
+    });
   };
 
   const resetResults = () => {
@@ -88,21 +96,21 @@ export default function Search({
 
   useEffect(() => {
     setQueryInput(query);
-    if (query.trim() && isLoaded && fullDoc) {
+    if (query.trim() && isLoaded) {
       setHasSubmitted(true);
       handleSearch(query);
       setOpen(true);
       collapseSelection();
     }
-  }, [query, isLoaded, fullDoc]);
+  }, [query, isLoaded]);
 
   useEffect(() => {
-    if (openFlag && isLoaded && fullDoc) {
+    if (openFlag && isLoaded) {
       setOpen(true);
       setHasSubmitted(false);
       collapseSelection();
     }
-  }, [openFlag, isLoaded, fullDoc]);
+  }, [openFlag, isLoaded]);
 
   useEffect(() => {
     return () => {
@@ -122,10 +130,10 @@ export default function Search({
   // When book changes, search in the new book and reset cursor
   useEffect(() => {
     const q = normalizeQ(queryInput);
-    if (open && q && book && hasSubmitted && isLoaded && fullDoc) {
+    if (open && q && book && hasSubmitted && isLoaded) {
       handleSearch(q);
     }
-  }, [book, isLoaded, fullDoc]);
+  }, [book, isLoaded]);
 
   const searchInDocument = (doc, q) => {
     const results = [];
