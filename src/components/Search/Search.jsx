@@ -273,10 +273,10 @@ export default function Search({
 
   useEffect(() => {
     if (!open) {
-      editor?.commands.unsetSearchHighlight();
+      scheduleEditorCommand(() => editor?.commands.unsetSearchHighlight());
       setCursor(-1);
     }
-  }, [open]);
+  }, [open, editor]);
 
   const handleClose = () => {
     setOpen(false);

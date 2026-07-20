@@ -643,15 +643,17 @@ function getRelativePositionInEditorDoc(
   if (!doc || blockIndex < 0 || !Array.isArray(childIndexPath)) return NaN;
   if (blockIndex >= doc.childCount) return NaN;
 
-  let blockStart = 1;
+  let blockStart = 0;
   for (let i = 0; i < blockIndex; i++) {
     blockStart += doc.child(i).nodeSize;
   }
 
   let currentNode = doc.child(blockIndex);
-  let currentStart = blockStart;
+  let parentContentStart = blockStart + 1;
+  let currentStart = NaN;
 
-  for (const idx of childIndexPath) {
+  for (let pathIndex = 0; pathIndex < childIndexPath.length; pathIndex++) {
+    const idx = childIndexPath[pathIndex];
     if (!currentNode || idx < 0 || idx >= currentNode.childCount) return NaN;
 
     let childOffset = 0;
@@ -659,11 +661,16 @@ function getRelativePositionInEditorDoc(
       childOffset += currentNode.child(i).nodeSize;
     }
 
-    currentStart = currentStart + childOffset;
-    currentNode = currentNode.child(idx);
+    const childStart = parentContentStart + childOffset;
+    const childNode = currentNode.child(idx);
+
+    currentNode = childNode;
+    currentStart = childStart;
+    parentContentStart = childStart + 1;
   }
 
   if (!currentNode?.isText) return NaN;
+  if (!Number.isFinite(currentStart)) return NaN;
 
   const safeCharIndex = Math.max(
     0,

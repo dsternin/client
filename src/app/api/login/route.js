@@ -4,6 +4,7 @@ import { UserSchema } from "@/app/models/user";
 import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import bcrypt from "bcrypt";
+import { createToken, setAuthCookie } from "@/lib/auth";
 
 const User = mongoose.models.User || mongoose.model("User", UserSchema);
 
@@ -33,18 +34,10 @@ export async function POST(req) {
       return NextResponse.json({ error: "Неверный пароль" }, { status: 401 });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1d",
-    });
+    const token = createToken(user._id);
 
     const response = NextResponse.json({ message: "Успешный вход" });
-    response.cookies.set("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      path: "/",
-      maxAge: 60 * 60 * 24, // 1 день
-    });
+    setAuthCookie(response, token);
 
     return response;
   } catch (err) {

@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import dbConnect from "@/lib/db";
 import { UserSchema } from "@/app/models/user";
 import mongoose from "mongoose";
+import { createToken, setAuthCookie } from "@/lib/auth";
 
 const User = mongoose.models?.User || mongoose.model("User", UserSchema);
 
@@ -21,7 +22,11 @@ export async function GET() {
     const { name, email, role } = await User.findById(userId).select(
       "name email role"
     );
-    return NextResponse.json({ user: { userId, email, name, role } });
+
+    const response = NextResponse.json({ user: { userId, email, name, role } });
+    setAuthCookie(response, createToken(userId));
+
+    return response;
   } catch (err) {
     return NextResponse.json({ user: null }, { status: 401 });
   }
