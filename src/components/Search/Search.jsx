@@ -398,7 +398,7 @@ export default function Search({
 
           <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
             <TextField
-              label="Введите слово или словосочетание"
+              label="Введите слово или фразу"
               value={queryInput}
               onChange={handleChange}
               fullWidth
