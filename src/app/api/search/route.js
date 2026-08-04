@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import {
   BookSchema,
+  ensureThesaurusBook,
   getBookChaptersWithTitles,
 } from "@/app/api/content/books/route";
 import { loadChapter } from "@/app/api/content/chapters/route";
@@ -22,6 +23,7 @@ export async function GET(req) {
   }
 
   await dbConnect();
+  await ensureThesaurusBook();
 
   const matches = [];
 

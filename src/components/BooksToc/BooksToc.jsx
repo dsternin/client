@@ -5,6 +5,7 @@ import {
   Typography,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   Accordion,
   AccordionSummary,
@@ -17,9 +18,11 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import useToc from "@/hooks/useToc";
+import { THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
 
 export default function BooksToc() {
   const { toc, trigger } = useToc();
+  const safeToc = Array.isArray(toc) ? toc : [];
   const [open, setOpen] = useState(false);
   const [expandedBook, setExpandedBook] = useState(false);
   const [expandedChapter, setExpandedChapter] = useState(false);
@@ -40,6 +43,17 @@ export default function BooksToc() {
       )}&section=${encodeURIComponent(section)}`
     );
     setOpen(false);
+  };
+
+  const topBookSx = {
+    backgroundColor: "#5f8f5a",
+    color: "#fff",
+    borderRadius: 1,
+    px: 2,
+    py: 1.5,
+    "&:hover": {
+      backgroundColor: "#4f7d4c",
+    },
   };
 
   return (
@@ -67,92 +81,126 @@ export default function BooksToc() {
             📚 Содержание
           </Typography>
 
-          {toc.map((book) => (
-            <Accordion
-              key={book.name}
-              expanded={expandedBook === book.name}
-              onChange={() => handleBookToggle(book.name)}
-            >
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="h6">{book.label}</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <List dense>
-                  {book.chapters.map((ch) => {
-                    const chapterId = `${book.name}-${ch.section}`;
-                    return (
-                      <Accordion
-                        key={chapterId}
-                        expanded={expandedChapter === chapterId}
-                        onChange={() => handleChapterToggle(chapterId)}
-                        sx={{ boxShadow: "none" }}
-                      >
-                        <AccordionSummary
-                          expandIcon={
-                            ch.points?.length > 0 ? <ExpandMoreIcon /> : null
-                          }
+          {safeToc.map((book) => {
+            if (book.name === THESAURUS_BOOK_NAME) {
+              return (
+                <Button
+                  key={book.name}
+                  variant="text"
+                  fullWidth
+                  sx={{
+                    justifyContent: "flex-start",
+                    textTransform: "none",
+                    mb: 1,
+                    ...topBookSx,
+                  }}
+                  onClick={() => {
+                    router.push(`/reader?book=${encodeURIComponent(book.name)}`);
+                    setOpen(false);
+                  }}
+                >
+                  <Typography
+                    variant="h6"
+                    sx={{ textAlign: "left", fontWeight: 500, color: "inherit" }}
+                  >
+                    {book.label}
+                  </Typography>
+                </Button>
+              );
+            }
+
+            return (
+              <Accordion
+                key={book.name}
+                expanded={expandedBook === book.name}
+                onChange={() => handleBookToggle(book.name)}
+                sx={{ mb: 1, borderRadius: 1, overflow: "hidden" }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon sx={{ color: "inherit" }} />}
+                  sx={topBookSx}
+                >
+                  <Typography variant="h6" sx={{ color: "inherit" }}>
+                    {book.label}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Box>
+                    {book.chapters.map((ch) => {
+                      const chapterId = `${book.name}-${ch.section}`;
+                      return (
+                        <Accordion
+                          key={chapterId}
+                          expanded={expandedChapter === chapterId}
+                          onChange={() => handleChapterToggle(chapterId)}
+                          sx={{ boxShadow: "none" }}
                         >
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              width: "100%",
-                            }}
-                            onClick={(e) => e.stopPropagation()}
+                          <AccordionSummary
+                            expandIcon={
+                              ch.points?.length > 0 ? <ExpandMoreIcon /> : null
+                            }
                           >
-                            <Typography
-                              fontWeight={500}
-                              sx={{ cursor: "pointer", flexGrow: 1 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleChapterClick(book.name, ch.title);
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                width: "100%",
                               }}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              {ch.title}
-                            </Typography>
-                          </Box>
-                        </AccordionSummary>
-                        {ch.points?.length > 0 && (
-                          <AccordionDetails sx={{ pl: 1 }}>
-                            <List dense>
-                              {ch.points.map((pt, ptIndex) => (
-                                <Link
-                                  key={`${book.name}-${ch.title}-${pt.id}-${ptIndex}`}
-                                  href={{
-                                    pathname: "/reader",
-                                    query: {
-                                      book: book.name,
-                                      section: ch.title,
-                                      point: pt.id,
-                                    },
-                                  }}
-                                  passHref
-                                  style={{
-                                    textDecoration: "none",
-                                    color: "#444",
-                                    display: "block",
-                                  }}
-                                >
-                                  <ListItem onClick={() => setOpen(false)}>
-                                    <ListItemText
-                                      primary={pt.title}
-                                      primaryTypographyProps={{
-                                        fontSize: "14px",
+                              <Typography
+                                fontWeight={500}
+                                sx={{ cursor: "pointer", flexGrow: 1 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleChapterClick(book.name, ch.title);
+                                }}
+                              >
+                                {ch.title}
+                              </Typography>
+                            </Box>
+                          </AccordionSummary>
+                          {ch.points?.length > 0 && (
+                            <AccordionDetails sx={{ pl: 1 }}>
+                              <List dense>
+                                {ch.points.map((pt, ptIndex) => (
+                                  <ListItem
+                                    key={`${book.name}-${ch.title}-${pt.id}-${ptIndex}`}
+                                    disablePadding
+                                  >
+                                    <ListItemButton
+                                      component={Link}
+                                      href={{
+                                        pathname: "/reader",
+                                        query: {
+                                          book: book.name,
+                                          section: ch.title,
+                                          point: pt.id,
+                                        },
                                       }}
-                                    />
+                                      onClick={() => setOpen(false)}
+                                      sx={{ color: "#444" }}
+                                    >
+                                      <ListItemText
+                                        primary={pt.title}
+                                        primaryTypographyProps={{
+                                          fontSize: "14px",
+                                        }}
+                                      />
+                                    </ListItemButton>
                                   </ListItem>
-                                </Link>
-                              ))}
-                            </List>
-                          </AccordionDetails>
-                        )}
-                      </Accordion>
-                    );
-                  })}
-                </List>
-              </AccordionDetails>
-            </Accordion>
-          ))}
+                                ))}
+                              </List>
+                            </AccordionDetails>
+                          )}
+                        </Accordion>
+                      );
+                    })}
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
+            );
+          })}
         </Box>
       </Drawer>
     </>

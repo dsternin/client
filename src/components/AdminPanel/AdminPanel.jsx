@@ -32,6 +32,7 @@ export default function AdminPanel({ children }) {
             "Теономика и экономика": () => router.push("/textEditor?book=teonomika"),
             "Динамика пространства и время": () => router.push("/textEditor?book=dinamika"),
             "Этноландшафт российской Евразии": () => router.push("/textEditor?book=etnolandshaft"),
+            "Тезаурус": () => router.push("/textEditor?book=thesaurus"),
           }}
           buttonProps={{ color: "primary" }}
         />

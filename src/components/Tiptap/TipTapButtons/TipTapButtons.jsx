@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  TextField,
   List,
   ListItemButton,
   ListItemText,
@@ -20,6 +21,12 @@ import ChapterLinkDialog from "@/components/ChapterLinkDialog";
 import { generateHTML } from "@tiptap/html";
 import getEditorExtensions from "@/lib/tiptapExtensions";
 import { useBookContext } from "@/store/BookContext";
+import {
+  THESAURUS_BOOK_NAME,
+  getThesaurusTerms,
+  removeThesaurusTerm,
+  upsertThesaurusTerm,
+} from "@/lib/thesaurus";
 
 function AnchorLinkDialog({ open, anchors, loading, onClose, onInsert }) {
   return (
@@ -56,13 +63,23 @@ function AnchorLinkDialog({ open, anchors, loading, onClose, onInsert }) {
 }
 
 export default function TipTapButtons({ editor, save, section }) {
-  const { bookLabel } = useBookContext();
+  const { bookLabel, book } = useBookContext();
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
   const [anchorDialogOpen, setAnchorDialogOpen] = useState(false);
   const [anchors, setAnchors] = useState([]);
   const [anchorsLoading, setAnchorsLoading] = useState(false);
+  const [termDialogOpen, setTermDialogOpen] = useState(false);
+  const [termInput, setTermInput] = useState("");
+  const [definitionInput, setDefinitionInput] = useState("");
+  const [termFormMessage, setTermFormMessage] = useState("");
+  const [deleteTermDialogOpen, setDeleteTermDialogOpen] = useState(false);
+  const [termsToDelete, setTermsToDelete] = useState([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [pendingDeleteTerm, setPendingDeleteTerm] = useState("");
+
+  const isThesaurus = book === THESAURUS_BOOK_NAME;
 
   const createAnchor = () => {
     if (!editor) return;
@@ -231,6 +248,203 @@ export default function TipTapButtons({ editor, save, section }) {
     input.click();
   };
 
+  const openTermDialog = () => {
+    setTermInput("");
+    setDefinitionInput("");
+    setTermFormMessage("");
+    setTermDialogOpen(true);
+  };
+
+  const handleAddTerm = () => {
+    const term = termInput.trim();
+    const definition = definitionInput.trim();
+
+    if (!term) {
+      setTermFormMessage("Введите название термина");
+      return;
+    }
+
+    const current = editor?.getJSON()?.content || [];
+    const terms = getThesaurusTerms(current);
+    const normalized = term.toLocaleLowerCase("uk");
+    const exists = terms.some(
+      (item) => item.toLocaleLowerCase("uk") === normalized,
+    );
+
+    if (exists) {
+      setTermFormMessage("Такой термин уже существует. Термин не был добавлен.");
+      return;
+    }
+
+    const next = upsertThesaurusTerm(current, term, definition);
+    editor?.commands.setContent({ type: "doc", content: next }, false);
+    setTermFormMessage("");
+    setTermDialogOpen(false);
+  };
+
+  const openDeleteTermDialog = () => {
+    const current = editor?.getJSON()?.content || [];
+    const terms = getThesaurusTerms(current);
+
+    if (!terms.length) {
+      alert("В тезаурусе пока нет терминов для удаления");
+      return;
+    }
+
+    setTermsToDelete(terms);
+    setDeleteTermDialogOpen(true);
+  };
+
+  const openDeleteConfirmation = (term) => {
+    setPendingDeleteTerm(term);
+    setConfirmDeleteOpen(true);
+  };
+
+  const handleDeleteTerm = (term) => {
+    const current = editor?.getJSON()?.content || [];
+    const next = removeThesaurusTerm(current, term);
+
+    editor?.commands.setContent({ type: "doc", content: next }, false);
+
+    const nextTerms = getThesaurusTerms(next);
+    setTermsToDelete(nextTerms);
+    if (!nextTerms.length) {
+      setDeleteTermDialogOpen(false);
+    }
+
+    setConfirmDeleteOpen(false);
+    setPendingDeleteTerm("");
+  };
+
+  if (isThesaurus) {
+    return (
+      <>
+        <Box
+          sx={{
+            zIndex: 1000,
+            top: "10.5rem",
+            mb: 2,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 1,
+            position: "sticky",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <Button color="secondary" variant="contained" onClick={openTermDialog}>
+            Добавить термин
+          </Button>
+
+          <Button color="error" variant="contained" onClick={openDeleteTermDialog}>
+            Удалить термин
+          </Button>
+
+          <Button variant="contained" onClick={save} color="success">
+            Сохранить
+          </Button>
+        </Box>
+
+        <Dialog
+          open={termDialogOpen}
+          onClose={() => setTermDialogOpen(false)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Добавить термин</DialogTitle>
+          <DialogContent sx={{ display: "grid", gap: 2, mt: 1 }}>
+            <TextField
+              autoFocus
+              label="Термин"
+              value={termInput}
+              onChange={(e) => {
+                setTermInput(e.target.value);
+                if (termFormMessage) setTermFormMessage("");
+              }}
+              fullWidth
+            />
+            <TextField
+              label="Определение"
+              value={definitionInput}
+              onChange={(e) => {
+                setDefinitionInput(e.target.value);
+                if (termFormMessage) setTermFormMessage("");
+              }}
+              fullWidth
+              multiline
+              minRows={3}
+            />
+            {termFormMessage && (
+              <Typography color="error" variant="body2">
+                {termFormMessage}
+              </Typography>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setTermDialogOpen(false)}>Отмена</Button>
+            <Button variant="contained" onClick={handleAddTerm}>
+              Добавить
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={deleteTermDialogOpen}
+          onClose={() => setDeleteTermDialogOpen(false)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Удалить термин</DialogTitle>
+          <DialogContent dividers>
+            <List>
+              {termsToDelete.map((term) => (
+                <ListItemButton key={term} onClick={() => openDeleteConfirmation(term)}>
+                  <ListItemText primary={term} />
+                </ListItemButton>
+              ))}
+            </List>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteTermDialogOpen(false)}>Закрыть</Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={confirmDeleteOpen}
+          onClose={() => {
+            setConfirmDeleteOpen(false);
+            setPendingDeleteTerm("");
+          }}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle>Подтвердите удаление</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Удалить термин "{pendingDeleteTerm}"?
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => {
+                setConfirmDeleteOpen(false);
+                setPendingDeleteTerm("");
+              }}
+            >
+              Отмена
+            </Button>
+            <Button
+              color="error"
+              variant="contained"
+              onClick={() => handleDeleteTerm(pendingDeleteTerm)}
+            >
+              Удалить
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </>
+    );
+  }
+
   return (
     <>
       <Box
@@ -271,6 +485,12 @@ export default function TipTapButtons({ editor, save, section }) {
         <Button color="primary" variant="contained" onClick={insertImage}>
           Вставить картинку
         </Button>
+
+        {isThesaurus && (
+          <Button color="secondary" variant="contained" onClick={openTermDialog}>
+            Новый термин
+          </Button>
+        )}
 
         <MenuButton
           label="Выравнивание"
@@ -384,6 +604,38 @@ export default function TipTapButtons({ editor, save, section }) {
         onClose={() => setAnchorDialogOpen(false)}
         onInsert={insertAnchorLink}
       />
+
+      <Dialog
+        open={termDialogOpen}
+        onClose={() => setTermDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Добавить термин</DialogTitle>
+        <DialogContent sx={{ display: "grid", gap: 2, mt: 1 }}>
+          <TextField
+            autoFocus
+            label="Термин"
+            value={termInput}
+            onChange={(e) => setTermInput(e.target.value)}
+            fullWidth
+          />
+          <TextField
+            label="Определение"
+            value={definitionInput}
+            onChange={(e) => setDefinitionInput(e.target.value)}
+            fullWidth
+            multiline
+            minRows={3}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTermDialogOpen(false)}>Отмена</Button>
+          <Button variant="contained" onClick={handleAddTerm}>
+            Добавить
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

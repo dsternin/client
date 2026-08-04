@@ -11,6 +11,7 @@ import TipTapButtons from "../Tiptap/TipTapButtons";
 import MenuButton from "../MenuButtons";
 import useNearestHeadings from "@/hooks/useNearestHeadings";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { sortThesaurusContent, THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
 
 function addIdsToHeadings(content) {
   function extractText(node) {
@@ -69,6 +70,7 @@ export default function Reader() {
   const containerRef = useRef(null);
 
   const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
+  const isThesaurus = book === THESAURUS_BOOK_NAME;
   const { editor } = useBookEditor(edit);
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
@@ -155,7 +157,7 @@ export default function Reader() {
 
     const params = new URLSearchParams();
     params.set("book", book);
-    params.set("pageSize", String(pageBlockSize));
+    params.set("pageSize", String(isThesaurus ? -1 : pageBlockSize));
     if (anchor) params.set("anchor", anchor);
     else if (point) params.set("point", point);
     else if (section) params.set("section", section);
@@ -170,11 +172,30 @@ export default function Reader() {
 
   const searchParams = useSearchParams();
 
-  const initialSection = searchParams.get("section");
-  const initialPoint = searchParams.get("point");
-  const initialAnchor = searchParams.get("anchor");
+  const initialSection = isThesaurus ? null : searchParams.get("section");
+  const initialPoint = isThesaurus ? null : searchParams.get("point");
+  const initialAnchor = isThesaurus ? null : searchParams.get("anchor");
 
-  useNearestHeadings(setSection, setPoint, fullDoc, pageContext);
+  useNearestHeadings(setSection, setPoint, fullDoc, pageContext, {
+    syncUrl: !isThesaurus,
+  });
+
+  useEffect(() => {
+    if (!isThesaurus) return;
+
+    const params = new URLSearchParams(searchParams);
+    const hadExtraParams =
+      params.has("section") || params.has("point") || params.has("anchor");
+
+    if (!hadExtraParams) return;
+
+    params.delete("section");
+    params.delete("point");
+    params.delete("anchor");
+
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [isThesaurus, searchParams, router, pathname]);
 
   useEffect(() => {
     if (editor) {
@@ -241,14 +262,14 @@ export default function Reader() {
   useEffect(() => {
     if (!book) return;
 
-    if (pageBlockSize === -1) {
+    if (isThesaurus || pageBlockSize === -1) {
       setCurrentPage(0);
       loadPageDocument(0, -1);
       return;
     }
 
     loadPageDocument(currentPage, pageBlockSize);
-  }, [book, currentPage, pageBlockSize]);
+  }, [book, currentPage, pageBlockSize, isThesaurus]);
 
   useEffect(() => {
     if (!book || pageBlockSize !== -1 || currentPage !== 0) return;
@@ -279,6 +300,11 @@ export default function Reader() {
     let editedPageContent = editor.getJSON().content;
     // Ensure all headings have IDs before saving
     editedPageContent = addIdsToHeadings(editedPageContent);
+    if (isThesaurus) {
+      editedPageContent = sortThesaurusContent(editedPageContent);
+    }
+
+    const savePageSize = isThesaurus ? -1 : pageBlockSize;
 
     const res = await fetch("/api/content/book-pages", {
       method: "POST",
@@ -286,7 +312,7 @@ export default function Reader() {
       body: JSON.stringify({
         book,
         page: currentPage,
-        pageSize: pageBlockSize,
+        pageSize: savePageSize,
         content: editedPageContent,
       }),
     });
@@ -296,7 +322,7 @@ export default function Reader() {
       return;
     }
 
-    await loadPageDocument(currentPage, pageBlockSize);
+    await loadPageDocument(currentPage, savePageSize);
 
     alert("Сохранено успешно!");
   }
@@ -323,7 +349,9 @@ export default function Reader() {
     if (!editor || !match) return;
 
     const targetPage =
-      pageBlockSize === -1 ? 0 : Math.floor(match.blockIndex / pageBlockSize);
+      isThesaurus || pageBlockSize === -1
+        ? 0
+        : Math.floor(match.blockIndex / pageBlockSize);
 
     setPendingMatch({ match, targetPage });
     setCurrentPage(targetPage);
@@ -580,43 +608,47 @@ export default function Reader() {
 
       {isLoaded && fullDoc && !edit && (
         <>
-          <Box
-            sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
-          >
-            <Button
-              variant="contained"
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage === 0}
-            >
-              Назад
-            </Button>
+          {!isThesaurus && (
+            <>
+              <Box
+                sx={{ display: "flex", justifyContent: "center", mt: 2, gap: 2 }}
+              >
+                <Button
+                  variant="contained"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 0}
+                >
+                  Назад
+                </Button>
 
-            <Typography variant="body1" sx={{ alignSelf: "center" }}>
-              Страница {currentPage + 1} из {totalPages}
-            </Typography>
+                <Typography variant="body1" sx={{ alignSelf: "center" }}>
+                  Страница {currentPage + 1} из {totalPages}
+                </Typography>
 
-            <Button
-              variant="contained"
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage + 1 >= totalPages}
-            >
-              Вперёд
-            </Button>
-          </Box>
+                <Button
+                  variant="contained"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage + 1 >= totalPages}
+                >
+                  Вперёд
+                </Button>
+              </Box>
 
-          <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
-            <MenuButton
-              label={`Абзацев на страницу: ${pageLabel}`}
-              items={{
-                50: () => updateBlockSize(50),
-                100: () => updateBlockSize(100),
-                500: () => updateBlockSize(500),
-                1000: () => updateBlockSize(1000),
-                "-1": () => updateBlockSize(-1),
-              }}
-              renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
-            />
-          </Box>
+              <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
+                <MenuButton
+                  label={`Абзацев на страницу: ${pageLabel}`}
+                  items={{
+                    50: () => updateBlockSize(50),
+                    100: () => updateBlockSize(100),
+                    500: () => updateBlockSize(500),
+                    1000: () => updateBlockSize(1000),
+                    "-1": () => updateBlockSize(-1),
+                  }}
+                  renderOption={(key) => (key === "-1" ? "Весь текст" : `${key}`)}
+                />
+              </Box>
+            </>
+          )}
 
           {isLoaded && !edit && (
             <Button

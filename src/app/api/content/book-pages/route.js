@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
-import { BookSchema, clearChapterCache } from "../books/route";
+import { BookSchema, clearChapterCache, ensureThesaurusBook } from "../books/route";
 import {
   loadChapter,
   saveChapter,
   syncChapterAnchors,
 } from "../chapters/route";
+import {
+  sortThesaurusContent,
+  THESAURUS_BOOK_NAME,
+} from "@/lib/thesaurus";
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
@@ -31,6 +35,10 @@ function extractText(node) {
 }
 
 async function readBookChapters(bookName) {
+  if (bookName === THESAURUS_BOOK_NAME) {
+    await ensureThesaurusBook();
+  }
+
   const bookDoc = await Book.findOne({ name: bookName });
   if (!bookDoc) return null;
 
@@ -358,6 +366,10 @@ export async function GET(req) {
     const point = searchParams.get("point");
     const section = searchParams.get("section");
 
+    if (bookName === THESAURUS_BOOK_NAME) {
+      await ensureThesaurusBook();
+    }
+
     if (!bookName) {
       return NextResponse.json(
         { error: "Missing book name" },
@@ -459,8 +471,24 @@ export async function POST(req) {
       return NextResponse.json({ error: "Invalid body" }, { status: 400 });
     }
 
-    const normalizedPageSize = pageSize === -1 ? -1 : Math.max(1, parseInteger(pageSize, DEFAULT_PAGE_SIZE));
-    const updatedSections = await updateBookPage(book, page, normalizedPageSize, content);
+    if (book === THESAURUS_BOOK_NAME) {
+      await ensureThesaurusBook();
+    }
+
+    const normalizedContent =
+      book === THESAURUS_BOOK_NAME ? sortThesaurusContent(content) : content;
+
+    const normalizedPageSize =
+      book === THESAURUS_BOOK_NAME
+        ? -1
+        : (pageSize === -1 ? -1 : Math.max(1, parseInteger(pageSize, DEFAULT_PAGE_SIZE)));
+
+    const updatedSections = await updateBookPage(
+      book,
+      page,
+      normalizedPageSize,
+      normalizedContent,
+    );
 
     clearChapterCache(book);
 

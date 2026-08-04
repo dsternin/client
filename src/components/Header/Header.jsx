@@ -4,14 +4,20 @@ import Link from "next/link";
 import styles from "./Header.module.css";
 import { Typography } from "@mui/material";
 import { Link as MuiLink } from "@mui/material";
+import { useEffect, useState } from "react";
 import LinkButton from "../LinkButton";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/store/AuthContext";
 import BooksToc from "../BooksToc";
 
 export default function Header() {
-  const { user, reset } = useAuth();
+  const { user, reset, loaded } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <header>
@@ -28,7 +34,7 @@ export default function Header() {
         </MuiLink>
         <BooksToc />
         <div style={{ marginLeft: "auto" }}>
-          {user ? (
+          {!mounted || !loaded ? null : user ? (
             <>
               <LinkButton
                 onClick={() => {

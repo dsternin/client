@@ -4,12 +4,21 @@ import styles from "./BookInfoPanel.module.css";
 import { Typography, Button, Box } from "@mui/material";
 import { useAuth } from "@/store/AuthContext";
 import { useBookContext } from "@/store/BookContext";
+import { THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
+import { useEffect, useState } from "react";
 
 export default function BookInfoPanel() {
-  const { bookLabel, section, point, edit, setEdit } = useBookContext();
-  const { user } = useAuth();
+  const { bookLabel, section, point, edit, setEdit, book } = useBookContext();
+  const { user, loaded } = useAuth();
+  const [mounted, setMounted] = useState(false);
 
-  const editButtonIsVisible = user?.role === "admin" && !edit;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isThesaurus = book === THESAURUS_BOOK_NAME;
+
+  const editButtonIsVisible = mounted && loaded && user?.role === "admin" && !edit;
 
   const handleEdit = () => {
     setEdit(true);
@@ -21,12 +30,16 @@ export default function BookInfoPanel() {
         <Typography variant="body1">
           📖 Книга: <strong>{bookLabel || "не выбрано"}</strong>
         </Typography>
-        <Typography variant="body1">
-          📂 Глава: <strong>{section || "не выбрано"}</strong>
-        </Typography>
-        <Typography variant="body1">
-          📄 Секция: <strong>{point || "не выбрано"}</strong>
-        </Typography>
+        {!isThesaurus && (
+          <>
+            <Typography variant="body1">
+              📂 Глава: <strong>{section || "не выбрано"}</strong>
+            </Typography>
+            <Typography variant="body1">
+              📄 Секция: <strong>{point || "не выбрано"}</strong>
+            </Typography>
+          </>
+        )}
       </Box>
 
       {editButtonIsVisible ? (

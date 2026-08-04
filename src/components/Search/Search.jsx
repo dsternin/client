@@ -211,8 +211,10 @@ export default function Search({
       // Build books list with counts
       const tocRes = await fetch("/api/content/toc", { signal });
       if (signal.aborted || requestId !== requestIdRef.current) return;
-      const toc = await tocRes.json();
+      const tocPayload = await tocRes.json();
       if (signal.aborted || requestId !== requestIdRef.current) return;
+      const toc = Array.isArray(tocPayload) ? tocPayload : [];
+
       const list = toc.map((b) => ({
         name: b.name,
         label: b.label || b.name,

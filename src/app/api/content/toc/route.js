@@ -2,13 +2,18 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
-import { BookSchema, getBookChaptersWithTitles } from "../books/route";
+import {
+  BookSchema,
+  ensureThesaurusBook,
+  getBookChaptersWithTitles,
+} from "../books/route";
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
 export async function GET() {
   try {
     await dbConnect();
+    await ensureThesaurusBook();
 
     const books = await Book.find({}).sort({ createdAt: 1 });
     const result = [];

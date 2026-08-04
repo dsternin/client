@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
+import {
+  THESAURUS_BOOK_LABEL,
+  THESAURUS_BOOK_NAME,
+  THESAURUS_DEFAULT_SECTION,
+} from "@/lib/thesaurus";
 
-import { loadChapter } from "../chapters/route";
+import { loadChapter, saveChapter } from "../chapters/route";
 import { cleanAllOldFiles } from "../claerCache/route";
 
 export const BookSchema = new mongoose.Schema(
@@ -15,6 +20,32 @@ export const BookSchema = new mongoose.Schema(
 );
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
+
+export async function ensureThesaurusBook() {
+  await dbConnect();
+
+  await Book.findOneAndUpdate(
+    { name: THESAURUS_BOOK_NAME },
+    {
+      $set: { label: THESAURUS_BOOK_LABEL },
+      $setOnInsert: {
+        name: THESAURUS_BOOK_NAME,
+      },
+      $addToSet: { chapters: THESAURUS_DEFAULT_SECTION },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+
+  try {
+    await loadChapter(THESAURUS_BOOK_NAME, THESAURUS_DEFAULT_SECTION);
+  } catch {
+    await saveChapter(
+      THESAURUS_BOOK_NAME,
+      THESAURUS_DEFAULT_SECTION,
+      JSON.stringify({ type: "doc", content: [] }),
+    );
+  }
+}
 
 const chapterCache = new Map();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -64,6 +95,7 @@ export function clearChapterCache(bookName) {
 export async function GET(req) {
   try {
     await dbConnect();
+    await ensureThesaurusBook();
     const { searchParams } = new URL(req.url);
     const bookName = searchParams.get("book");
 
@@ -92,6 +124,7 @@ export async function GET(req) {
 export async function PUT(req) {
   try {
     const conn = await dbConnect();
+    await ensureThesaurusBook();
     const { book, chapters } = await req.json();
 
     if (!book || !Array.isArray(chapters)) {

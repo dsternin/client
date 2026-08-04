@@ -1,6 +1,7 @@
 "use client";
 import { useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
+import { THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
 
 const BookContext = createContext({});
 
@@ -14,7 +15,15 @@ export function BookContextProvider({ children }) {
   const [point, setPoint] = useState("");
 
   useEffect(() => {
-    setBook(searchParams.get("book"));
+    const currentBook = searchParams.get("book");
+    setBook(currentBook);
+
+    if (currentBook === THESAURUS_BOOK_NAME) {
+      setSection("");
+      setPoint("");
+      return;
+    }
+
     setSection(searchParams.get("section"));
     setPoint(searchParams.get("point"));
   }, [searchParams]);
