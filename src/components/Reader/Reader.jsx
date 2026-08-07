@@ -76,7 +76,7 @@ export default function Reader() {
 
   const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
   const isThesaurus = book === THESAURUS_BOOK_NAME;
-  const { editor } = useBookEditor(edit);
+  const { editor } = useBookEditor(edit && !isThesaurus);
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [pageDoc, setPageDoc] = useState(null);
@@ -221,9 +221,9 @@ export default function Reader() {
 
   useEffect(() => {
     if (editor) {
-      editor.setEditable(edit);
+      editor.setEditable(edit && !isThesaurus);
     }
-  }, [edit, editor]);
+  }, [edit, editor, isThesaurus]);
 
   function scheduleSetContent(doc, replace = false, onApplied) {
     if (!editor) return;
@@ -659,7 +659,19 @@ export default function Reader() {
 
       <div ref={containerRef}>
         {isLoaded && isThesaurus && !edit && (
-          <Box sx={{ mb: 2, mt: 1 }}>
+          <Box
+            sx={{
+              mb: 2,
+              mt: 1,
+              position: "sticky",
+              top: "8.5rem",
+              zIndex: 950,
+              backgroundColor: "rgba(248, 244, 239, 0.92)",
+              backdropFilter: "blur(4px)",
+              borderRadius: 1,
+              p: 1,
+            }}
+          >
             <TextField
               fullWidth
               label="Поиск по терминам"
