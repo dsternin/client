@@ -2,16 +2,21 @@
 
 import useBookEditor from "@/hooks/useBookEditor";
 import { EditorContent } from "@tiptap/react";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import Search from "../Search";
-import { CircularProgress, Box, Button, Typography } from "@mui/material";
+import { CircularProgress, Box, Button, Typography, TextField } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { useBookContext } from "@/store/BookContext";
 import TipTapButtons from "../Tiptap/TipTapButtons";
 import MenuButton from "../MenuButtons";
 import useNearestHeadings from "@/hooks/useNearestHeadings";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { sortThesaurusContent, THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
+import {
+  filterThesaurusContentByPrefix,
+  getThesaurusTerms,
+  sortThesaurusContent,
+  THESAURUS_BOOK_NAME,
+} from "@/lib/thesaurus";
 
 function addIdsToHeadings(content) {
   function extractText(node) {
@@ -86,6 +91,7 @@ export default function Reader() {
   const [loadingBook, setLoadingBook] = useState(false);
   const [loadingPage, setLoadingPage] = useState(false);
   const [pageError, setPageError] = useState(null);
+  const [thesaurusTermQuery, setThesaurusTermQuery] = useState("");
 
   async function fetchPage(bookName, page, pageSize) {
     const res = await fetch(buildPageUrl(bookName, page, pageSize), {
@@ -143,6 +149,21 @@ export default function Reader() {
   }
 
   const pageLabel = pageBlockSize === -1 ? "Весь текст" : `${pageBlockSize}`;
+
+  const filteredThesaurusContent = useMemo(() => {
+    if (!isThesaurus || edit) return pageDoc;
+    return filterThesaurusContentByPrefix(pageDoc || [], thesaurusTermQuery);
+  }, [isThesaurus, edit, pageDoc, thesaurusTermQuery]);
+
+  const totalThesaurusTerms = useMemo(() => {
+    if (!isThesaurus) return 0;
+    return getThesaurusTerms(pageDoc || []).length;
+  }, [isThesaurus, pageDoc]);
+
+  const visibleThesaurusTerms = useMemo(() => {
+    if (!isThesaurus) return 0;
+    return getThesaurusTerms(filteredThesaurusContent || []).length;
+  }, [isThesaurus, filteredThesaurusContent]);
 
   const [start, setStart] = useState();
   const [end, setEnd] = useState();
@@ -257,6 +278,7 @@ export default function Reader() {
     setTotalPages(0);
     setTotalBlocks(0);
     setPageError(null);
+    setThesaurusTermQuery("");
   }, [book]);
 
   useEffect(() => {
@@ -297,15 +319,20 @@ export default function Reader() {
       return;
     }
     if (pageDoc) {
-      scheduleSetContent({ type: "doc", content: pageDoc }, false, () => {
+      const contentToRender =
+        isThesaurus && !edit
+          ? (filteredThesaurusContent || [])
+          : pageDoc;
+
+      scheduleSetContent({ type: "doc", content: contentToRender }, false, () => {
         setPageAppliedRevision((prev) => prev + 1);
       });
       // Keep fullDoc in sync with currently loaded page to avoid eager full-book fetch.
-      setFullDoc({ type: "doc", content: pageDoc });
+      setFullDoc({ type: "doc", content: contentToRender });
       setIsLoaded(true);
       setIsReadyToScroll(true);
     }
-  }, [editor, pageDoc, loadingBook, loadingPage]);
+  }, [editor, pageDoc, loadingBook, loadingPage, isThesaurus, edit, filteredThesaurusContent]);
 
   async function save() {
     if (!editor || !book || !pageDoc) return;
@@ -617,6 +644,50 @@ export default function Reader() {
       ) : null}
 
       <div ref={containerRef}>
+        {isLoaded && isThesaurus && !edit && (
+          <Box sx={{ mb: 2, mt: 1 }}>
+            <TextField
+              fullWidth
+              label="Поиск по терминам"
+              placeholder="Введите начало термина"
+              value={thesaurusTermQuery}
+              onChange={(e) => setThesaurusTermQuery(e.target.value)}
+              size="small"
+              autoComplete="off"
+              sx={{
+                "& .MuiInputBase-root": {
+                  backgroundColor: "#fff",
+                },
+                "& .MuiInputBase-input": {
+                  fontWeight: 700,
+                  color: "#111",
+                },
+                "& .MuiOutlinedInput-notchedOutline": {
+                  borderColor: "#b81414",
+                  borderWidth: "2px",
+                },
+                "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+                  borderColor: "#8e1010",
+                },
+                "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                  borderColor: "#8e1010",
+                },
+              }}
+              slotProps={{
+                inputLabel: {
+                  sx: {
+                    color: "#b81414",
+                    fontWeight: 600,
+                  },
+                },
+              }}
+            />
+            <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
+              Найдено терминов: {visibleThesaurusTerms} из {totalThesaurusTerms}
+            </Typography>
+          </Box>
+        )}
+
         <EditorContent editor={editor} />
       </div>
 

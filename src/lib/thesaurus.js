@@ -65,6 +65,22 @@ export function sortThesaurusContent(content = []) {
   return [...prefix, ...sortedTerms.flatMap((entry) => entry.blocks)];
 }
 
+export function filterThesaurusContentByPrefix(content = [], query = "") {
+  const normalized = String(query || "").trim().toLocaleLowerCase("uk");
+  const { prefix, terms } = splitThesaurusEntries(content);
+
+  if (!normalized) {
+    const sortedTerms = sortTermEntries(terms);
+    return [...prefix, ...sortedTerms.flatMap((entry) => entry.blocks)];
+  }
+
+  const filtered = sortTermEntries(terms).filter((entry) =>
+    String(entry.term || "").toLocaleLowerCase("uk").startsWith(normalized),
+  );
+
+  return [...prefix, ...filtered.flatMap((entry) => entry.blocks)];
+}
+
 export function buildThesaurusTermBlocks(term, definition) {
   const safeTerm = String(term || "").trim();
   const safeDefinition = String(definition || "").trim();
