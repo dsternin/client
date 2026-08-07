@@ -7,6 +7,7 @@ import {
   getBookChaptersWithTitles,
 } from "@/app/api/content/books/route";
 import { loadChapter } from "@/app/api/content/chapters/route";
+import { THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
@@ -28,6 +29,10 @@ export async function GET(req) {
   const matches = [];
 
   if (bookName) {
+    if (bookName === THESAURUS_BOOK_NAME) {
+      return NextResponse.json({ count: 0, matches: [] });
+    }
+
     // Search in a single book
     const bookDoc = await Book.findOne({ name: bookName });
     if (!bookDoc) {
@@ -75,7 +80,7 @@ export async function GET(req) {
     }
   } else {
     // Search across all books
-    const books = await Book.find({});
+    const books = await Book.find({ name: { $ne: THESAURUS_BOOK_NAME } });
 
     for (const bookDoc of books) {
       const sections = await getBookChaptersWithTitles(bookDoc);

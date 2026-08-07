@@ -260,6 +260,20 @@ export default function Reader() {
   }, [book]);
 
   useEffect(() => {
+    if (!isThesaurus) return;
+
+    const params = new URLSearchParams(searchParams);
+    const hasSearchParams = params.has("query") || params.has("openSearch");
+    if (!hasSearchParams) return;
+
+    params.delete("query");
+    params.delete("openSearch");
+
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [isThesaurus, pathname, router, searchParams]);
+
+  useEffect(() => {
     if (!book) return;
 
     if (isThesaurus || pageBlockSize === -1) {
@@ -569,7 +583,7 @@ export default function Reader() {
   return (
     <>
       {isLoaded ? (
-        !edit && (
+        !edit && !isThesaurus && (
           <Search
             highlight={highlight}
             editor={editor}
@@ -650,7 +664,7 @@ export default function Reader() {
             </>
           )}
 
-          {isLoaded && !edit && (
+          {isLoaded && !edit && !isThesaurus && (
             <Button
               variant="contained"
               startIcon={<SearchIcon />}
