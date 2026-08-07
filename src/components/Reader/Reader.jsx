@@ -196,6 +196,7 @@ export default function Reader() {
   const initialSection = isThesaurus ? null : searchParams.get("section");
   const initialPoint = isThesaurus ? null : searchParams.get("point");
   const initialAnchor = isThesaurus ? null : searchParams.get("anchor");
+  const initialTerm = isThesaurus ? searchParams.get("term") : null;
 
   useNearestHeadings(setSection, setPoint, fullDoc, pageContext, {
     syncUrl: !isThesaurus,
@@ -464,7 +465,7 @@ export default function Reader() {
 
   useEffect(() => {
     if (!isLoaded || !editor) return;
-    if (!initialSection && !initialPoint && !initialAnchor) return;
+    if (!initialSection && !initialPoint && !initialAnchor && !initialTerm) return;
 
     setStart(NaN);
     setEnd(NaN);
@@ -475,6 +476,17 @@ export default function Reader() {
     let cancelled = false;
 
     (async () => {
+      if (isThesaurus && initialTerm) {
+        setPendingNavigation({
+          page: 0,
+          type: "term",
+          value: initialTerm,
+          blockIndex: -1,
+        });
+        setCurrentPage(0);
+        return;
+      }
+
       const payload = await resolveNavigationPage({
         section: initialSection,
         point: initialPoint,
@@ -507,6 +519,8 @@ export default function Reader() {
     initialPoint,
     initialSection,
     initialAnchor,
+    initialTerm,
+    isThesaurus,
     isReadyToScroll,
     book,
     pageBlockSize,
