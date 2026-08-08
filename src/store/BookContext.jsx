@@ -10,6 +10,7 @@ export function BookContextProvider({ children }) {
   const searchParams = useSearchParams();
   const [book, setBook] = useState("");
   const [bookLabel, setBookLabel] = useState("");
+  const [editingTermLabel, setEditingTermLabel] = useState("");
 
   const [section, setSection] = useState("");
   const [point, setPoint] = useState("");
@@ -34,11 +35,13 @@ export function BookContextProvider({ children }) {
         section,
         point,
         bookLabel,
+        editingTermLabel,
         edit,
         setBook,
         setSection,
         setPoint,
         setBookLabel,
+        setEditingTermLabel,
         setEdit,
       }}
     >

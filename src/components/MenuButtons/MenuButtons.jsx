@@ -21,7 +21,16 @@ export default function MenuButton({
   };
 
   const handleSelect = (key) => {
-    items[key]?.();
+    const item = items[key];
+    const action = typeof item === "function" ? item : item?.action;
+    const disabled = typeof item === "function" ? false : Boolean(item?.disabled);
+
+    if (disabled) {
+      handleClose();
+      return;
+    }
+
+    action?.();
     handleClose();
   };
 
@@ -36,11 +45,20 @@ export default function MenuButton({
         {label}
       </Button>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
-        {Object.entries(items).map(([key, _]) => (
-          <MenuItem key={key} onClick={() => handleSelect(key)}>
-            {renderOption(key)}
-          </MenuItem>
-        ))}
+        {Object.entries(items).map(([key, value]) => {
+          const disabled =
+            typeof value === "function" ? false : Boolean(value?.disabled);
+
+          return (
+            <MenuItem
+              key={key}
+              disabled={disabled}
+              onClick={() => handleSelect(key)}
+            >
+              {renderOption(key)}
+            </MenuItem>
+          );
+        })}
       </Menu>
     </>
   );

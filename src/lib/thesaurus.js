@@ -17,7 +17,30 @@ function isTermHeading(block) {
   return block?.type === "heading" && block?.attrs?.level === 2;
 }
 
-function splitThesaurusEntries(content = []) {
+function normalizeSynonyms(rawSynonyms) {
+  const list = Array.isArray(rawSynonyms)
+    ? rawSynonyms
+    : String(rawSynonyms || "")
+      .split(",")
+      .map((item) => item.trim());
+
+  const seen = new Set();
+  const normalized = [];
+
+  for (const item of list) {
+    const value = String(item || "").trim();
+    if (!value) continue;
+
+    const key = value.toLocaleLowerCase("uk");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(value);
+  }
+
+  return normalized;
+}
+
+export function splitThesaurusEntries(content = []) {
   const prefix = [];
   const terms = [];
 
@@ -33,6 +56,7 @@ function splitThesaurusEntries(content = []) {
 
     const blocks = [clone(current)];
     const term = extractText(current).trim();
+    const synonyms = normalizeSynonyms(current?.attrs?.synonyms);
     i += 1;
 
     while (i < content.length && !isTermHeading(content[i])) {
@@ -40,7 +64,7 @@ function splitThesaurusEntries(content = []) {
       i += 1;
     }
 
-    terms.push({ term, blocks });
+    terms.push({ term, blocks, synonyms });
   }
 
   return { prefix, terms };
@@ -50,6 +74,10 @@ function sortTermEntries(entries = []) {
   return [...entries].sort((a, b) =>
     (a.term || "").localeCompare(b.term || "", "uk", { sensitivity: "base" }),
   );
+}
+
+export function getThesaurusEntries(content = []) {
+  return splitThesaurusEntries(content);
 }
 
 export function getThesaurusTerms(content = []) {
@@ -66,42 +94,81 @@ export function sortThesaurusContent(content = []) {
 }
 
 export function filterThesaurusContentByPrefix(content = [], query = "") {
-  const normalized = String(query || "").trim().toLocaleLowerCase("uk");
-  const { prefix, terms } = splitThesaurusEntries(content);
-
-  if (!normalized) {
-    const sortedTerms = sortTermEntries(terms);
-    return [...prefix, ...sortedTerms.flatMap((entry) => entry.blocks)];
-  }
-
-  const filtered = sortTermEntries(terms).filter((entry) =>
-    String(entry.term || "").toLocaleLowerCase("uk").startsWith(normalized),
-  );
-
-  return [...prefix, ...filtered.flatMap((entry) => entry.blocks)];
+  const { prefix, entries } = findThesaurusEntriesByPrefix(content, query);
+  return [...prefix, ...entries.flatMap((entry) => entry.blocks)];
 }
 
-export function buildThesaurusTermBlocks(term, definition) {
+export function findThesaurusEntriesByPrefix(content = [], query = "") {
+  const normalized = String(query || "").trim().toLocaleLowerCase("uk");
+  const { prefix, terms } = splitThesaurusEntries(content);
+  const sortedTerms = sortTermEntries(terms);
+
+  if (!normalized) {
+    return {
+      prefix,
+      entries: sortedTerms.map((entry) => ({
+        ...entry,
+        matchedBy: null,
+        matchedSynonym: "",
+      })),
+    };
+  }
+
+  const filtered = sortedTerms
+    .map((entry) => {
+      const termMatch = String(entry.term || "")
+        .toLocaleLowerCase("uk")
+        .startsWith(normalized);
+
+      const synonymMatch = (entry.synonyms || []).find((synonym) =>
+        String(synonym || "").toLocaleLowerCase("uk").startsWith(normalized),
+      );
+
+      if (!termMatch && !synonymMatch) return null;
+
+      return {
+        ...entry,
+        matchedBy: termMatch ? "term" : "synonym",
+        matchedSynonym: termMatch ? "" : synonymMatch || "",
+      };
+    })
+    .filter(Boolean);
+
+  return { prefix, entries: filtered };
+}
+
+function buildEmptyDefinitionBlock() {
+  return [{ type: "paragraph", attrs: { textAlign: "left" }, content: [] }];
+}
+
+export function buildThesaurusTermBlocks(term, definitionOrBlocks = "", options = {}) {
   const safeTerm = String(term || "").trim();
-  const safeDefinition = String(definition || "").trim();
+  const synonyms = normalizeSynonyms(options?.synonyms);
 
   if (!safeTerm) return [];
+
+  const bodyBlocks = Array.isArray(definitionOrBlocks)
+    ? definitionOrBlocks.map(clone)
+    : String(definitionOrBlocks || "").trim()
+      ? [{ type: "paragraph", attrs: { textAlign: "left" }, content: [{ type: "text", text: String(definitionOrBlocks).trim() }] }]
+      : buildEmptyDefinitionBlock();
 
   return [
     {
       type: "heading",
-      attrs: { level: 2, id: safeTerm, textAlign: "left" },
+      attrs: {
+        level: 2,
+        id: safeTerm,
+        textAlign: "left",
+        synonyms,
+      },
       content: [{ type: "text", text: safeTerm }],
     },
-    {
-      type: "paragraph",
-      attrs: { textAlign: "left" },
-      content: safeDefinition ? [{ type: "text", text: safeDefinition }] : [],
-    },
+    ...bodyBlocks,
   ];
 }
 
-export function upsertThesaurusTerm(content = [], term, definition) {
+export function upsertThesaurusTermBlocks(content = [], term, blocks = []) {
   const safeTerm = String(term || "").trim();
   if (!safeTerm) return sortThesaurusContent(content);
 
@@ -112,10 +179,21 @@ export function upsertThesaurusTerm(content = [], term, definition) {
     (entry) => (entry.term || "").toLocaleLowerCase("uk") !== normalized,
   );
 
-  filtered.push({ term: safeTerm, blocks: buildThesaurusTermBlocks(safeTerm, definition) });
+  const normalizedBlocks = Array.isArray(blocks) && blocks.length
+    ? blocks.map(clone)
+    : buildThesaurusTermBlocks(safeTerm, "");
+
+  filtered.push({ term: safeTerm, blocks: normalizedBlocks });
 
   const sorted = sortTermEntries(filtered);
   return [...prefix, ...sorted.flatMap((entry) => entry.blocks)];
+}
+
+export function upsertThesaurusTerm(content = [], term, definition) {
+  const safeTerm = String(term || "").trim();
+  if (!safeTerm) return sortThesaurusContent(content);
+
+  return upsertThesaurusTermBlocks(content, safeTerm, buildThesaurusTermBlocks(safeTerm, definition));
 }
 
 export function removeThesaurusTerm(content = [], term) {

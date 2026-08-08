@@ -4,7 +4,20 @@ import useBookEditor from "@/hooks/useBookEditor";
 import { EditorContent } from "@tiptap/react";
 import { useEffect, useState, useRef, useMemo } from "react";
 import Search from "../Search";
-import { CircularProgress, Box, Button, Typography, TextField } from "@mui/material";
+import {
+  CircularProgress,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  List,
+  ListItemButton,
+  ListItemText,
+  Typography,
+  TextField,
+} from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { useBookContext } from "@/store/BookContext";
 import TipTapButtons from "../Tiptap/TipTapButtons";
@@ -12,10 +25,14 @@ import MenuButton from "../MenuButtons";
 import useNearestHeadings from "@/hooks/useNearestHeadings";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
-  filterThesaurusContentByPrefix,
+  buildThesaurusTermBlocks,
+  findThesaurusEntriesByPrefix,
+  getThesaurusEntries,
   getThesaurusTerms,
+  removeThesaurusTerm,
   sortThesaurusContent,
   THESAURUS_BOOK_NAME,
+  upsertThesaurusTermBlocks,
 } from "@/lib/thesaurus";
 
 function addIdsToHeadings(content) {
@@ -69,14 +86,53 @@ function buildPageUrl(book, page, pageSize) {
   return `/api/content/book-pages?${params.toString()}`;
 }
 
+function buildSynonymMatchHintBlock(synonym) {
+  return {
+    type: "paragraph",
+    attrs: { textAlign: "left" },
+    content: [
+      {
+        type: "text",
+        text: `Синоним: ${synonym}`,
+        marks: [
+          { type: "textStyle", attrs: { color: "#6b7280" } },
+          { type: "italic" },
+        ],
+      },
+    ],
+  };
+}
+
+function withSynonymHint(entry) {
+  if (!entry || entry.matchedBy !== "synonym" || !entry.matchedSynonym) {
+    return entry?.blocks || [];
+  }
+
+  const blocks = entry.blocks || [];
+  if (!blocks.length) return blocks;
+
+  const [first, ...rest] = blocks;
+  if (first?.type === "heading" && first?.attrs?.level === 2) {
+    return [first, buildSynonymMatchHintBlock(entry.matchedSynonym), ...rest];
+  }
+
+  return [buildSynonymMatchHintBlock(entry.matchedSynonym), ...blocks];
+}
+
 export default function Reader() {
   const router = useRouter();
   const pathname = usePathname();
   const containerRef = useRef(null);
 
-  const { book = "intro", setBookLabel, edit, setEdit } = useBookContext();
+  const {
+    book = "intro",
+    setBookLabel,
+    edit,
+    setEdit,
+    setEditingTermLabel,
+  } = useBookContext();
   const isThesaurus = book === THESAURUS_BOOK_NAME;
-  const { editor } = useBookEditor(edit && !isThesaurus);
+  const { editor } = useBookEditor(edit);
   const { setSection, setPoint } = useBookContext();
   const [fullDoc, setFullDoc] = useState(null);
   const [pageDoc, setPageDoc] = useState(null);
@@ -92,6 +148,18 @@ export default function Reader() {
   const [loadingPage, setLoadingPage] = useState(false);
   const [pageError, setPageError] = useState(null);
   const [thesaurusTermQuery, setThesaurusTermQuery] = useState("");
+  const [selectedThesaurusTerm, setSelectedThesaurusTerm] = useState("");
+  const [selectedThesaurusBlocks, setSelectedThesaurusBlocks] = useState([]);
+  const [thesaurusModalOpen, setThesaurusModalOpen] = useState(false);
+  const [thesaurusModalMode, setThesaurusModalMode] = useState("create");
+  const [thesaurusNameDraft, setThesaurusNameDraft] = useState("");
+  const [thesaurusNameError, setThesaurusNameError] = useState("");
+  const [thesaurusDeleteDialogOpen, setThesaurusDeleteDialogOpen] = useState(false);
+  const [pendingDeleteTerm, setPendingDeleteTerm] = useState("");
+  const [thesaurusEditorOpen, setThesaurusEditorOpen] = useState(false);
+  const [selectedThesaurusSynonyms, setSelectedThesaurusSynonyms] = useState([]);
+  const [synonymsDialogOpen, setSynonymsDialogOpen] = useState(false);
+  const [synonymsDraft, setSynonymsDraft] = useState("");
 
   async function fetchPage(bookName, page, pageSize) {
     const res = await fetch(buildPageUrl(bookName, page, pageSize), {
@@ -150,10 +218,18 @@ export default function Reader() {
 
   const pageLabel = pageBlockSize === -1 ? "Весь текст" : `${pageBlockSize}`;
 
+  const thesaurusSearchResult = useMemo(() => {
+    if (!isThesaurus) return { prefix: [], entries: [] };
+    return findThesaurusEntriesByPrefix(pageDoc || [], thesaurusTermQuery);
+  }, [isThesaurus, pageDoc, thesaurusTermQuery]);
+
   const filteredThesaurusContent = useMemo(() => {
     if (!isThesaurus || edit) return pageDoc;
-    return filterThesaurusContentByPrefix(pageDoc || [], thesaurusTermQuery);
-  }, [isThesaurus, edit, pageDoc, thesaurusTermQuery]);
+    return [
+      ...(thesaurusSearchResult.prefix || []),
+      ...((thesaurusSearchResult.entries || []).flatMap((entry) => withSynonymHint(entry))),
+    ];
+  }, [isThesaurus, edit, pageDoc, thesaurusSearchResult]);
 
   const totalThesaurusTerms = useMemo(() => {
     if (!isThesaurus) return 0;
@@ -162,8 +238,13 @@ export default function Reader() {
 
   const visibleThesaurusTerms = useMemo(() => {
     if (!isThesaurus) return 0;
-    return getThesaurusTerms(filteredThesaurusContent || []).length;
-  }, [isThesaurus, filteredThesaurusContent]);
+    return (thesaurusSearchResult.entries || []).length;
+  }, [isThesaurus, thesaurusSearchResult]);
+
+  const thesaurusEntries = useMemo(() => {
+    if (!isThesaurus || !pageDoc) return [];
+    return getThesaurusEntries(pageDoc).terms || [];
+  }, [isThesaurus, pageDoc]);
 
   const [start, setStart] = useState();
   const [end, setEnd] = useState();
@@ -172,6 +253,7 @@ export default function Reader() {
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [pageAppliedRevision, setPageAppliedRevision] = useState(0);
   const pageRequestIdRef = useRef(0);
+  const wasEditRef = useRef(false);
 
   async function resolveNavigationPage({ section, point, anchor }) {
     if (!book) return null;
@@ -221,9 +303,29 @@ export default function Reader() {
 
   useEffect(() => {
     if (editor) {
-      editor.setEditable(edit && !isThesaurus);
+      editor.setEditable(edit && (!isThesaurus || thesaurusEditorOpen));
     }
-  }, [edit, editor, isThesaurus]);
+  }, [edit, editor, isThesaurus, thesaurusEditorOpen]);
+
+  useEffect(() => {
+    const enteredEditMode = !wasEditRef.current && edit;
+
+    if (enteredEditMode && isThesaurus) {
+      setThesaurusEditorOpen(false);
+      setSelectedThesaurusTerm("");
+      setSelectedThesaurusBlocks([]);
+      setSelectedThesaurusSynonyms([]);
+      setThesaurusModalOpen(false);
+      setThesaurusDeleteDialogOpen(false);
+      setSynonymsDialogOpen(false);
+      setSynonymsDraft("");
+      setThesaurusNameDraft("");
+      setThesaurusNameError("");
+      setEditingTermLabel("");
+    }
+
+    wasEditRef.current = edit;
+  }, [edit, isThesaurus, setEditingTermLabel]);
 
   function scheduleSetContent(doc, replace = false, onApplied) {
     if (!editor) return;
@@ -264,6 +366,17 @@ export default function Reader() {
 
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }
+
+  useEffect(() => {
+    if (!isThesaurus || !pageDoc) {
+      setSelectedThesaurusTerm("");
+      setSelectedThesaurusBlocks([]);
+      setSelectedThesaurusSynonyms([]);
+      setThesaurusEditorOpen(false);
+      setEditingTermLabel("");
+      return;
+    }
+  }, [isThesaurus, pageDoc, setEditingTermLabel]);
 
   useEffect(() => {
     if (!book) return;
@@ -323,7 +436,11 @@ export default function Reader() {
       const contentToRender =
         isThesaurus && !edit
           ? (filteredThesaurusContent || [])
-          : pageDoc;
+          : isThesaurus && edit && thesaurusEditorOpen
+            ? (selectedThesaurusBlocks.length
+                ? selectedThesaurusBlocks
+                : [{ type: "paragraph", attrs: { textAlign: "left" }, content: [] }])
+            : pageDoc;
 
       scheduleSetContent({ type: "doc", content: contentToRender }, false, () => {
         setPageAppliedRevision((prev) => prev + 1);
@@ -333,15 +450,156 @@ export default function Reader() {
       setIsLoaded(true);
       setIsReadyToScroll(true);
     }
-  }, [editor, pageDoc, loadingBook, loadingPage, isThesaurus, edit, filteredThesaurusContent]);
+  }, [editor, pageDoc, loadingBook, loadingPage, isThesaurus, edit, filteredThesaurusContent, selectedThesaurusBlocks]);
+
+  function openThesaurusEditor(termName) {
+    const normalizedTerm = String(termName || "").trim();
+    if (!normalizedTerm) return;
+
+    const existingEntry = thesaurusEntries.find(
+      (entry) => String(entry.term || "").toLocaleLowerCase("uk") === normalizedTerm.toLocaleLowerCase("uk"),
+    );
+
+    const termBlocks = existingEntry?.blocks?.length
+      ? existingEntry.blocks
+      : buildThesaurusTermBlocks(normalizedTerm, "");
+    const termSynonyms = Array.isArray(existingEntry?.synonyms)
+      ? existingEntry.synonyms
+      : [];
+
+    const bodyBlocks =
+      termBlocks[0]?.type === "heading" && termBlocks[0]?.attrs?.level === 2
+        ? termBlocks.slice(1)
+        : termBlocks;
+
+    setSelectedThesaurusTerm(normalizedTerm);
+    setSelectedThesaurusBlocks(bodyBlocks);
+    setSelectedThesaurusSynonyms(termSynonyms);
+    setSynonymsDraft(termSynonyms.join(", "));
+    setThesaurusEditorOpen(true);
+    setEditingTermLabel(normalizedTerm);
+    setThesaurusModalOpen(false);
+    setThesaurusNameDraft("");
+    setThesaurusNameError("");
+  }
+
+  function openAddThesaurusTermModal() {
+    if (!isThesaurus) return;
+    setThesaurusModalMode("create");
+    setThesaurusNameDraft("");
+    setThesaurusNameError("");
+    setThesaurusModalOpen(true);
+  }
+
+  function openEditThesaurusTermModal() {
+    if (!isThesaurus) return;
+    setThesaurusModalMode("edit");
+    setThesaurusNameDraft("");
+    setThesaurusNameError("");
+    setThesaurusModalOpen(true);
+  }
+
+  function confirmThesaurusModal() {
+    const termName = thesaurusNameDraft.trim();
+    if (!termName) {
+      setThesaurusNameError("Введите название термина");
+      return;
+    }
+
+    if (thesaurusModalMode === "create") {
+      const normalized = termName.toLocaleLowerCase("uk");
+      const exists = thesaurusEntries.some(
+        (entry) => String(entry.term || "").toLocaleLowerCase("uk") === normalized,
+      );
+
+      if (exists) {
+        setThesaurusNameError("Такой термин уже существует");
+        return;
+      }
+    }
+
+    setThesaurusNameError("");
+    openThesaurusEditor(termName);
+  }
+
+  function openDeleteThesaurusTermDialog() {
+    if (!isThesaurus) return;
+    setPendingDeleteTerm("");
+    setThesaurusDeleteDialogOpen(true);
+  }
+
+  function parseSynonyms(value) {
+    const parts = String(value || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const seen = new Set();
+    const result = [];
+
+    for (const item of parts) {
+      const key = item.toLocaleLowerCase("uk");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
+    }
+
+    return result;
+  }
+
+  function openSynonymsDialog() {
+    setSynonymsDraft((selectedThesaurusSynonyms || []).join(", "));
+    setSynonymsDialogOpen(true);
+  }
+
+  function saveSynonyms() {
+    const nextSynonyms = parseSynonyms(synonymsDraft);
+    setSelectedThesaurusSynonyms(nextSynonyms);
+    setSynonymsDraft(nextSynonyms.join(", "));
+    setSynonymsDialogOpen(false);
+  }
+
+  function confirmDeleteThesaurusTerm(termName) {
+    if (!termName) return;
+    const nextContent = removeThesaurusTerm(pageDoc || [], termName);
+    setPageDoc(nextContent);
+    setPendingDeleteTerm("");
+    setThesaurusDeleteDialogOpen(false);
+    setThesaurusEditorOpen(false);
+    setSelectedThesaurusTerm("");
+    setSelectedThesaurusBlocks([]);
+    setEditingTermLabel("");
+  }
 
   async function save() {
     if (!editor || !book || !pageDoc) return;
     setIsReadyToScroll(false);
 
     let editedPageContent = editor.getJSON().content;
-    // Ensure all headings have IDs before saving
-    editedPageContent = addIdsToHeadings(editedPageContent);
+
+    if (isThesaurus && edit) {
+      if (thesaurusEditorOpen && selectedThesaurusTerm) {
+        const termBlocks = buildThesaurusTermBlocks(
+          selectedThesaurusTerm,
+          editedPageContent,
+          { synonyms: selectedThesaurusSynonyms },
+        );
+        editedPageContent = upsertThesaurusTermBlocks(pageDoc || [], selectedThesaurusTerm, termBlocks);
+      } else {
+        editedPageContent = addIdsToHeadings(editedPageContent);
+      }
+    } else {
+      // Ensure all headings have IDs before saving
+      editedPageContent = addIdsToHeadings(editedPageContent);
+      if (isThesaurus) {
+        editedPageContent = sortThesaurusContent(editedPageContent);
+      }
+    }
+
+    if (!isThesaurus || !edit) {
+      editedPageContent = addIdsToHeadings(editedPageContent);
+    }
+
     if (isThesaurus) {
       editedPageContent = sortThesaurusContent(editedPageContent);
     }
@@ -650,6 +908,11 @@ export default function Reader() {
       {isLoaded && edit ? (
         <TipTapButtons
           editor={editor}
+          onAddTerm={openAddThesaurusTermModal}
+          onEditTerm={openEditThesaurusTermModal}
+          onDeleteTerm={openDeleteThesaurusTermDialog}
+          onEditSynonyms={openSynonymsDialog}
+          termEditorMode={isThesaurus && thesaurusEditorOpen}
           save={() => {
             save();
             setEdit(false);
@@ -711,11 +974,109 @@ export default function Reader() {
             <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
               Найдено терминов: {visibleThesaurusTerms} из {totalThesaurusTerms}
             </Typography>
+
           </Box>
         )}
 
-        <EditorContent editor={editor} />
+        {isLoaded && isThesaurus && edit && thesaurusEditorOpen ? (
+          <Box sx={{ mt: { xs: 4, md: 3 } }}>
+            <EditorContent editor={editor} />
+            <Box sx={{ mt: 2, display: "flex", gap: 1 }}>
+              <Button variant="contained" color="success" onClick={() => { save(); setEdit(false); }}>
+                Сохранить термин
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setThesaurusEditorOpen(false);
+                  setEditingTermLabel("");
+                }}
+              >
+                Назад
+              </Button>
+            </Box>
+          </Box>
+        ) : (
+          <EditorContent editor={editor} />
+        )}
       </div>
+
+      <Dialog open={thesaurusModalOpen} onClose={() => setThesaurusModalOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>
+          {thesaurusModalMode === "create" ? "Добавить термин" : "Редактировать термин"}
+        </DialogTitle>
+        <DialogContent>
+          {thesaurusModalMode === "create" ? (
+            <TextField
+              autoFocus
+              fullWidth
+              label="Назва терміна"
+              value={thesaurusNameDraft}
+              onChange={(e) => {
+                setThesaurusNameDraft(e.target.value);
+                if (thesaurusNameError) setThesaurusNameError("");
+              }}
+              sx={{ mt: 1 }}
+            />
+          ) : (
+            <List sx={{ mt: 1 }}>
+              {thesaurusEntries.map((entry) => (
+                <ListItemButton key={entry.term} onClick={() => openThesaurusEditor(entry.term)}>
+                  <ListItemText primary={entry.term} />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+          {thesaurusNameError ? (
+            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+              {thesaurusNameError}
+            </Typography>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setThesaurusModalOpen(false)}>Отмена</Button>
+          {thesaurusModalMode === "create" ? (
+            <Button variant="contained" onClick={confirmThesaurusModal}>
+              Відкрити редактор
+            </Button>
+          ) : null}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={thesaurusDeleteDialogOpen} onClose={() => setThesaurusDeleteDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Удалить термин</DialogTitle>
+        <DialogContent>
+          <List>
+            {thesaurusEntries.map((entry) => (
+              <ListItemButton key={entry.term} onClick={() => confirmDeleteThesaurusTerm(entry.term)}>
+                <ListItemText primary={entry.term} />
+              </ListItemButton>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setThesaurusDeleteDialogOpen(false)}>Закрыть</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={synonymsDialogOpen} onClose={() => setSynonymsDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Редактировать синонимы</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Синонимы через запятую"
+            value={synonymsDraft}
+            onChange={(e) => setSynonymsDraft(e.target.value)}
+            sx={{ mt: 1 }}
+            placeholder="например: вода, H2O"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSynonymsDialogOpen(false)}>Отмена</Button>
+          <Button variant="contained" onClick={saveSynonyms}>Сохранить</Button>
+        </DialogActions>
+      </Dialog>
 
       {isLoaded && fullDoc && !edit && (
         <>

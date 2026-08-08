@@ -8,7 +8,15 @@ import { THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
 import { useEffect, useState } from "react";
 
 export default function BookInfoPanel() {
-  const { bookLabel, section, point, edit, setEdit, book } = useBookContext();
+  const {
+    bookLabel,
+    section,
+    point,
+    edit,
+    setEdit,
+    book,
+    editingTermLabel,
+  } = useBookContext();
   const { user, loaded } = useAuth();
   const [mounted, setMounted] = useState(false);
 
@@ -29,6 +37,14 @@ export default function BookInfoPanel() {
       <Box className={styles.infoBlock}>
         <Typography variant="body1">
           📖 Книга: <strong>{bookLabel || "не выбрано"}</strong>
+          {isThesaurus && edit && editingTermLabel ? (
+            <>
+              {" "}
+              <span>
+                · Редактирование термина <strong>"{editingTermLabel}"</strong>
+              </span>
+            </>
+          ) : null}
         </Typography>
         {!isThesaurus && (
           <>

@@ -8,7 +8,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  TextField,
   List,
   ListItemButton,
   ListItemText,
@@ -25,7 +24,6 @@ import {
   THESAURUS_BOOK_NAME,
   getThesaurusTerms,
   removeThesaurusTerm,
-  upsertThesaurusTerm,
 } from "@/lib/thesaurus";
 
 function AnchorLinkDialog({ open, anchors, loading, onClose, onInsert }) {
@@ -90,7 +88,16 @@ function ThesaurusTermLinkDialog({ open, terms, loading, onClose, onInsert }) {
   );
 }
 
-export default function TipTapButtons({ editor, save, section }) {
+export default function TipTapButtons({
+  editor,
+  save,
+  section,
+  onAddTerm,
+  onEditTerm,
+  onDeleteTerm,
+  onEditSynonyms,
+  termEditorMode = false,
+}) {
   const { bookLabel, book } = useBookContext();
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -101,16 +108,13 @@ export default function TipTapButtons({ editor, save, section }) {
   const [termLinkDialogOpen, setTermLinkDialogOpen] = useState(false);
   const [termLinks, setTermLinks] = useState([]);
   const [termLinksLoading, setTermLinksLoading] = useState(false);
-  const [termDialogOpen, setTermDialogOpen] = useState(false);
-  const [termInput, setTermInput] = useState("");
-  const [definitionInput, setDefinitionInput] = useState("");
-  const [termFormMessage, setTermFormMessage] = useState("");
   const [deleteTermDialogOpen, setDeleteTermDialogOpen] = useState(false);
   const [termsToDelete, setTermsToDelete] = useState([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [pendingDeleteTerm, setPendingDeleteTerm] = useState("");
 
   const isThesaurus = book === THESAURUS_BOOK_NAME;
+  const showThesaurusTermActions = isThesaurus && !termEditorMode;
 
   const createAnchor = () => {
     if (!editor) return;
@@ -307,40 +311,6 @@ export default function TipTapButtons({ editor, save, section }) {
     input.click();
   };
 
-  const openTermDialog = () => {
-    setTermInput("");
-    setDefinitionInput("");
-    setTermFormMessage("");
-    setTermDialogOpen(true);
-  };
-
-  const handleAddTerm = () => {
-    const term = termInput.trim();
-    const definition = definitionInput.trim();
-
-    if (!term) {
-      setTermFormMessage("Введите название термина");
-      return;
-    }
-
-    const current = editor?.getJSON()?.content || [];
-    const terms = getThesaurusTerms(current);
-    const normalized = term.toLocaleLowerCase("uk");
-    const exists = terms.some(
-      (item) => item.toLocaleLowerCase("uk") === normalized,
-    );
-
-    if (exists) {
-      setTermFormMessage("Такой термин уже существует. Термин не был добавлен.");
-      return;
-    }
-
-    const next = upsertThesaurusTerm(current, term, definition);
-    editor?.commands.setContent({ type: "doc", content: next }, false);
-    setTermFormMessage("");
-    setTermDialogOpen(false);
-  };
-
   const openDeleteTermDialog = () => {
     const current = editor?.getJSON()?.content || [];
     const terms = getThesaurusTerms(current);
@@ -375,7 +345,7 @@ export default function TipTapButtons({ editor, save, section }) {
     setPendingDeleteTerm("");
   };
 
-  if (isThesaurus) {
+  if (showThesaurusTermActions) {
     return (
       <>
         <Box
@@ -390,61 +360,22 @@ export default function TipTapButtons({ editor, save, section }) {
             backdropFilter: "blur(4px)",
           }}
         >
-          <Button color="secondary" variant="contained" onClick={openTermDialog}>
+          <Button color="secondary" variant="contained" onClick={onAddTerm}>
             Добавить термин
           </Button>
 
-          <Button color="error" variant="contained" onClick={openDeleteTermDialog}>
+          <Button color="error" variant="contained" onClick={onDeleteTerm || openDeleteTermDialog}>
             Удалить термин
+          </Button>
+
+          <Button variant="contained" onClick={onEditTerm}>
+            Редактировать термин
           </Button>
 
           <Button variant="contained" onClick={save} color="success">
             Сохранить
           </Button>
         </Box>
-
-        <Dialog
-          open={termDialogOpen}
-          onClose={() => setTermDialogOpen(false)}
-          fullWidth
-          maxWidth="sm"
-        >
-          <DialogTitle>Добавить термин</DialogTitle>
-          <DialogContent sx={{ display: "grid", gap: 2, mt: 1 }}>
-            <TextField
-              autoFocus
-              label="Термин"
-              value={termInput}
-              onChange={(e) => {
-                setTermInput(e.target.value);
-                if (termFormMessage) setTermFormMessage("");
-              }}
-              fullWidth
-            />
-            <TextField
-              label="Определение"
-              value={definitionInput}
-              onChange={(e) => {
-                setDefinitionInput(e.target.value);
-                if (termFormMessage) setTermFormMessage("");
-              }}
-              fullWidth
-              multiline
-              minRows={3}
-            />
-            {termFormMessage && (
-              <Typography color="error" variant="body2">
-                {termFormMessage}
-              </Typography>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setTermDialogOpen(false)}>Отмена</Button>
-            <Button variant="contained" onClick={handleAddTerm}>
-              Добавить
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         <Dialog
           open={deleteTermDialogOpen}
@@ -518,6 +449,12 @@ export default function TipTapButtons({ editor, save, section }) {
           backdropFilter: "blur(4px)",
         }}
       >
+        {isThesaurus && termEditorMode ? (
+          <Button variant="contained" color="secondary" onClick={onEditSynonyms}>
+            Редактировать синонимы
+          </Button>
+        ) : null}
+
         <MenuButton
           label="Стиль текста"
           items={{
@@ -544,12 +481,6 @@ export default function TipTapButtons({ editor, save, section }) {
         <Button color="primary" variant="contained" onClick={insertImage}>
           Вставить картинку
         </Button>
-
-        {isThesaurus && (
-          <Button color="secondary" variant="contained" onClick={openTermDialog}>
-            Новый термин
-          </Button>
-        )}
 
         <MenuButton
           label="Выравнивание"
@@ -597,7 +528,10 @@ export default function TipTapButtons({ editor, save, section }) {
         <MenuButton
           label="Якоря"
           items={{
-            "Создать якорь": createAnchor,
+            "Создать якорь": {
+              action: createAnchor,
+              disabled: isThesaurus && termEditorMode,
+            },
             // "Удалить якорь": removeAnchor,
             "Ссылка на якорь": openAnchorLinkDialog,
           }}
@@ -676,37 +610,6 @@ export default function TipTapButtons({ editor, save, section }) {
         onInsert={insertTermLink}
       />
 
-      <Dialog
-        open={termDialogOpen}
-        onClose={() => setTermDialogOpen(false)}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>Добавить термин</DialogTitle>
-        <DialogContent sx={{ display: "grid", gap: 2, mt: 1 }}>
-          <TextField
-            autoFocus
-            label="Термин"
-            value={termInput}
-            onChange={(e) => setTermInput(e.target.value)}
-            fullWidth
-          />
-          <TextField
-            label="Определение"
-            value={definitionInput}
-            onChange={(e) => setDefinitionInput(e.target.value)}
-            fullWidth
-            multiline
-            minRows={3}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTermDialogOpen(false)}>Отмена</Button>
-          <Button variant="contained" onClick={handleAddTerm}>
-            Добавить
-          </Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 }
