@@ -40,7 +40,8 @@ export default function BooksToc() {
     router.push(
       `/reader?book=${encodeURIComponent(
         bookName
-      )}&section=${encodeURIComponent(section)}`
+      )}&section=${encodeURIComponent(section)}`,
+      { scroll: false }
     );
     setOpen(false);
   };
@@ -178,6 +179,7 @@ export default function BooksToc() {
                                           point: pt.id,
                                         },
                                       }}
+                                      scroll={false}
                                       onClick={() => setOpen(false)}
                                       sx={{ color: "#444" }}
                                     >

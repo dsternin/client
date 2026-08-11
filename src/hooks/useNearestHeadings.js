@@ -56,7 +56,8 @@ export default function useNearestHeadings(
     if (!fullDoc) {
       setSection("");
       setPoint("");
-      if (syncUrl) scheduleUrlSync("", "");
+      // Do not clear section/point from URL during a book transition —
+      // the params are still needed by the navigation effect to scroll to the target.
       return;
     }
 

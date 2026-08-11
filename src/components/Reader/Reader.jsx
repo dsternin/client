@@ -286,6 +286,8 @@ export default function Reader() {
 
   useEffect(() => {
     if (!isThesaurus) return;
+    // searchParams may already reflect the new book before BookContext updates isThesaurus
+    if (searchParams.get("book") !== THESAURUS_BOOK_NAME) return;
 
     const params = new URLSearchParams(searchParams);
     const hadExtraParams =
@@ -381,6 +383,7 @@ export default function Reader() {
   useEffect(() => {
     if (!book) return;
     setIsLoaded(false);
+    setIsReadyToScroll(false);
     pageRequestIdRef.current += 1;
     setFullDoc(null);
     setPageDoc(null);
@@ -397,6 +400,8 @@ export default function Reader() {
 
   useEffect(() => {
     if (!isThesaurus) return;
+    // searchParams may already reflect the new book before BookContext updates isThesaurus
+    if (searchParams.get("book") !== THESAURUS_BOOK_NAME) return;
 
     const params = new URLSearchParams(searchParams);
     const hasSearchParams = params.has("query") || params.has("openSearch");
@@ -854,7 +859,8 @@ export default function Reader() {
         return;
       }
 
-      router.push(url.pathname + url.search + url.hash);
+      // Full page load so the Reader always mounts fresh with the correct URL
+      window.location.assign(url.pathname + url.search + url.hash);
     };
 
     const onMouseEnter = (e) => {
