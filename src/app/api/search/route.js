@@ -29,10 +29,6 @@ export async function GET(req) {
   const matches = [];
 
   if (bookName) {
-    if (bookName === THESAURUS_BOOK_NAME) {
-      return NextResponse.json({ count: 0, matches: [] });
-    }
-
     // Search in a single book
     const bookDoc = await Book.findOne({ name: bookName });
     if (!bookDoc) {
@@ -68,6 +64,12 @@ export async function GET(req) {
         blockOffset,
       );
 
+      if (bookName === THESAURUS_BOOK_NAME) {
+        localMatches.push(
+          ...findThesaurusSynonymMatches(contentArray, query, blockOffset),
+        );
+      }
+
       localMatches.forEach((m) => {
         matches.push({
           book: bookName,
@@ -80,7 +82,7 @@ export async function GET(req) {
     }
   } else {
     // Search across all books
-    const books = await Book.find({ name: { $ne: THESAURUS_BOOK_NAME } });
+    const books = await Book.find({});
 
     for (const bookDoc of books) {
       const sections = await getBookChaptersWithTitles(bookDoc);
@@ -112,6 +114,12 @@ export async function GET(req) {
           blockOffset,
         );
 
+        if (bookDoc.name === THESAURUS_BOOK_NAME) {
+          localMatches.push(
+            ...findThesaurusSynonymMatches(contentArray, query, blockOffset),
+          );
+        }
+
         localMatches.forEach((m) => {
           matches.push({
             book: bookDoc.name,
@@ -136,6 +144,38 @@ function findWordInTipTapContent(contentArray, search, blockOffset = 0) {
 
   contentArray.forEach((block, blockIndex) => {
     searchInNode(block, blockOffset + blockIndex, [], search, matches);
+  });
+
+  return matches;
+}
+
+function findThesaurusSynonymMatches(contentArray, search, blockOffset = 0) {
+  const normalizedSearch = String(search || "").toLocaleLowerCase("uk");
+  if (!normalizedSearch) return [];
+
+  const matches = [];
+
+  contentArray.forEach((block, blockIndex) => {
+    if (block?.type !== "heading" || block?.attrs?.level !== 2) return;
+
+    const synonyms = Array.isArray(block?.attrs?.synonyms)
+      ? block.attrs.synonyms
+      : [];
+    const hasMatch = synonyms.some((synonym) =>
+      String(synonym || "").toLocaleLowerCase("uk").includes(normalizedSearch),
+    );
+
+    if (!hasMatch) return;
+
+    const termText = block?.content?.[0]?.text || "";
+    if (!termText) return;
+
+    matches.push({
+      blockIndex: blockOffset + blockIndex,
+      childIndexPath: [0],
+      charIndex: 0,
+      length: termText.length,
+    });
   });
 
   return matches;

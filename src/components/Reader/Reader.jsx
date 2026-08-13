@@ -399,22 +399,6 @@ export default function Reader() {
   }, [book]);
 
   useEffect(() => {
-    if (!isThesaurus) return;
-    // searchParams may already reflect the new book before BookContext updates isThesaurus
-    if (searchParams.get("book") !== THESAURUS_BOOK_NAME) return;
-
-    const params = new URLSearchParams(searchParams);
-    const hasSearchParams = params.has("query") || params.has("openSearch");
-    if (!hasSearchParams) return;
-
-    params.delete("query");
-    params.delete("openSearch");
-
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [isThesaurus, pathname, router, searchParams]);
-
-  useEffect(() => {
     if (!book) return;
 
     if (isThesaurus || pageBlockSize === -1) {
@@ -888,7 +872,7 @@ export default function Reader() {
   return (
     <>
       {isLoaded ? (
-        !edit && !isThesaurus && (
+        !edit && (
           <Search
             highlight={highlight}
             editor={editor}
@@ -1128,7 +1112,7 @@ export default function Reader() {
             </>
           )}
 
-          {isLoaded && !edit && !isThesaurus && (
+          {isLoaded && !edit && (
             <Button
               variant="contained"
               startIcon={<SearchIcon />}

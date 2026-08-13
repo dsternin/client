@@ -13,7 +13,6 @@ import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import CloseIcon from "@mui/icons-material/Close";
 import RedButton from "../RedButton";
 import { useAuth } from "@/store/AuthContext";
-import { THESAURUS_BOOK_NAME } from "@/lib/thesaurus";
 
 const CACHE_MAX = 12;
 const searchCache = new Map();
@@ -215,7 +214,7 @@ export default function Search({
       const tocPayload = await tocRes.json();
       if (signal.aborted || requestId !== requestIdRef.current) return;
       const toc = Array.isArray(tocPayload)
-        ? tocPayload.filter((item) => item?.name !== THESAURUS_BOOK_NAME)
+        ? tocPayload
         : [];
 
       const list = toc.map((b) => ({
