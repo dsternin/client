@@ -64,16 +64,11 @@ export async function GET(req) {
         blockOffset,
       );
 
-      if (bookName === THESAURUS_BOOK_NAME) {
-        localMatches.push(
-          ...findThesaurusSynonymMatches(contentArray, query, blockOffset),
-        );
-      }
-
       localMatches.forEach((m) => {
         matches.push({
           book: bookName,
           section: sections[i].title,
+          searchText: m.searchText || query,
           ...m,
         });
       });
@@ -114,16 +109,11 @@ export async function GET(req) {
           blockOffset,
         );
 
-        if (bookDoc.name === THESAURUS_BOOK_NAME) {
-          localMatches.push(
-            ...findThesaurusSynonymMatches(contentArray, query, blockOffset),
-          );
-        }
-
         localMatches.forEach((m) => {
           matches.push({
             book: bookDoc.name,
             section: sections[i].title,
+            searchText: m.searchText || query,
             ...m,
           });
         });
@@ -143,45 +133,27 @@ function findWordInTipTapContent(contentArray, search, blockOffset = 0) {
   const matches = [];
 
   contentArray.forEach((block, blockIndex) => {
-    searchInNode(block, blockOffset + blockIndex, [], search, matches);
-  });
-
-  return matches;
-}
-
-function findThesaurusSynonymMatches(contentArray, search, blockOffset = 0) {
-  const normalizedSearch = String(search || "").toLocaleLowerCase("uk");
-  if (!normalizedSearch) return [];
-
-  const matches = [];
-
-  contentArray.forEach((block, blockIndex) => {
-    if (block?.type !== "heading" || block?.attrs?.level !== 2) return;
-
-    const synonyms = Array.isArray(block?.attrs?.synonyms)
-      ? block.attrs.synonyms
-      : [];
-    const hasMatch = synonyms.some((synonym) =>
-      String(synonym || "").toLocaleLowerCase("uk").includes(normalizedSearch),
+    searchInNode(
+      block,
+      blockOffset + blockIndex,
+      [],
+      search,
+      matches,
+      { value: 0 },
     );
-
-    if (!hasMatch) return;
-
-    const termText = block?.content?.[0]?.text || "";
-    if (!termText) return;
-
-    matches.push({
-      blockIndex: blockOffset + blockIndex,
-      childIndexPath: [0],
-      charIndex: 0,
-      length: termText.length,
-    });
   });
 
   return matches;
 }
 
-function searchInNode(node, globalBlockIndex, childPath, search, matches) {
+function searchInNode(
+  node,
+  globalBlockIndex,
+  childPath,
+  search,
+  matches,
+  blockTextOffset,
+) {
   if (node.text) {
     const text = node.text;
     let pos = -1;
@@ -192,8 +164,11 @@ function searchInNode(node, globalBlockIndex, childPath, search, matches) {
         childIndexPath: [...childPath],
         charIndex: pos,
         length: search.length,
+        blockTextOffset: blockTextOffset.value + pos,
       });
     }
+
+    blockTextOffset.value += text.length;
   }
 
   if (node.content) {
@@ -204,6 +179,7 @@ function searchInNode(node, globalBlockIndex, childPath, search, matches) {
         [...childPath, idx],
         search,
         matches,
+        blockTextOffset,
       );
     });
   }

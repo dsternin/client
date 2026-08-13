@@ -661,7 +661,16 @@ export default function Reader() {
       return;
     }
 
-    const relativePos = getRelativePositionInEditorDoc(
+    const liveTextRange = isThesaurus
+      ? findTextRangeInEditorBlock(
+          editor.state.doc,
+          localBlockIndex,
+          pendingMatch.match.searchText,
+          pendingMatch.match.blockTextOffset,
+        )
+      : null;
+
+    const relativePos = liveTextRange?.from ?? getRelativePositionInEditorDoc(
       editor.state.doc,
       localBlockIndex,
       pendingMatch.match.childIndexPath,
@@ -670,7 +679,7 @@ export default function Reader() {
 
     if (!Number.isFinite(relativePos)) return;
 
-    const range = clampHighlightRange(
+    const range = liveTextRange || clampHighlightRange(
       editor.state.doc,
       relativePos,
       pendingMatch.match.length,
@@ -689,6 +698,7 @@ export default function Reader() {
     loadingBook,
     loadingPage,
     pageAppliedRevision,
+    isThesaurus,
   ]);
 
   useEffect(() => {
@@ -1172,6 +1182,57 @@ function getRelativePositionInEditorDoc(
   );
 
   return currentStart + safeCharIndex;
+}
+
+function findTextRangeInEditorBlock(
+  doc,
+  blockIndex,
+  searchText,
+  blockTextOffset,
+) {
+  if (!doc || blockIndex < 0 || !searchText) return null;
+  if (blockIndex >= doc.childCount) return null;
+
+  let blockStart = 0;
+  for (let index = 0; index < blockIndex; index += 1) {
+    blockStart += doc.child(index).nodeSize;
+  }
+
+  const block = doc.child(blockIndex);
+  let match = null;
+  let textOffset = 0;
+  const expectedOffset = Number.isInteger(blockTextOffset)
+    ? blockTextOffset
+    : null;
+
+  block.descendants((node, position) => {
+    if (match || !node.isText || !node.text) return;
+
+    const nodeStart = textOffset;
+    const nodeEnd = nodeStart + node.text.length;
+    textOffset = nodeEnd;
+
+    if (
+      expectedOffset === null ||
+      expectedOffset < nodeStart ||
+      expectedOffset + String(searchText).length > nodeEnd
+    ) {
+      return;
+    }
+
+    const matchText = node.text.slice(
+      expectedOffset - nodeStart,
+      expectedOffset - nodeStart + String(searchText).length,
+    );
+    if (matchText.toLocaleLowerCase("uk") !== String(searchText).toLocaleLowerCase("uk")) {
+      return;
+    }
+
+    const from = blockStart + 1 + position + expectedOffset - nodeStart;
+    match = { from, to: from + String(searchText).length };
+  });
+
+  return match;
 }
 
 function clampHighlightRange(doc, from, length) {
