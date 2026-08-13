@@ -1016,7 +1016,7 @@ export default function Reader() {
             <TextField
               autoFocus
               fullWidth
-              label="Назва терміна"
+              label="Название термина"
               value={thesaurusNameDraft}
               onChange={(e) => {
                 setThesaurusNameDraft(e.target.value);
@@ -1043,7 +1043,7 @@ export default function Reader() {
           <Button onClick={() => setThesaurusModalOpen(false)}>Отмена</Button>
           {thesaurusModalMode === "create" ? (
             <Button variant="contained" onClick={confirmThesaurusModal}>
-              Відкрити редактор
+              Открыть редактор
             </Button>
           ) : null}
         </DialogActions>
