@@ -100,9 +100,10 @@ export async function saveChapter(book, section, content) {
   const conn = await dbConnect();
   const db = conn.connection.db;
   const bucket = new GridFSBucket(db);
+  const filename = `${book}_${section}`;
 
   const stream = Readable.from([content]);
-  const uploadStream = bucket.openUploadStream(`${book}_${section}`, {
+  const uploadStream = bucket.openUploadStream(filename, {
     metadata: { book, section },
   });
 
@@ -110,8 +111,20 @@ export async function saveChapter(book, section, content) {
     stream
       .pipe(uploadStream)
       .on("error", reject)
-      .on("finish", () => {
-        resolve(section);
+      .on("finish", async () => {
+        try {
+          const versions = await bucket.find({ filename }).toArray();
+
+          await Promise.all(
+            versions
+              .filter((file) => String(file._id) !== String(uploadStream.id))
+              .map((file) => bucket.delete(file._id)),
+          );
+
+          resolve(section);
+        } catch (error) {
+          reject(error);
+        }
       });
   });
 }

@@ -137,7 +137,7 @@ export async function PUT(req) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     chapterCache.delete(book);
-    cleanAllOldFiles(conn.connection.db);
+    await cleanAllOldFiles(conn.connection.db);
     return NextResponse.json({ ok: true, id: updated._id });
   } catch (error) {
     console.error(error);
