@@ -10,6 +10,7 @@ import {
 import {
   sortThesaurusContent,
   THESAURUS_BOOK_NAME,
+  THESAURUS_DEFAULT_SECTION,
 } from "@/lib/thesaurus";
 
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
@@ -189,6 +190,24 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
   const bookDoc = await Book.findOne({ name: bookName });
   if (!bookDoc) {
     throw new Error("Book not found");
+  }
+
+  if (bookName === THESAURUS_BOOK_NAME) {
+    const document = createDocument(pageContent || []);
+
+    await saveChapter(
+      bookName,
+      THESAURUS_DEFAULT_SECTION,
+      JSON.stringify(document),
+    );
+    await syncChapterAnchors(bookName, THESAURUS_DEFAULT_SECTION, document);
+    await Book.findOneAndUpdate(
+      { name: bookName },
+      { chapters: [THESAURUS_DEFAULT_SECTION] },
+      { new: true },
+    );
+
+    return [THESAURUS_DEFAULT_SECTION];
   }
 
   if (pageSize === -1) {

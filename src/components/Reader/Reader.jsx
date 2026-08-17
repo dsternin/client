@@ -119,6 +119,49 @@ function withSynonymHint(entry) {
   return [buildSynonymMatchHintBlock(entry.matchedSynonym), ...blocks];
 }
 
+function withTermEditPencil(entry) {
+  if (!entry) return [];
+
+  const blocks = JSON.parse(JSON.stringify(entry.blocks || []));
+  if (!blocks.length) return blocks;
+
+  const headingIndex = blocks.findIndex(
+    (block) => block?.type === "heading" && block?.attrs?.level === 2,
+  );
+
+  const pencilNode = {
+    type: "text",
+    text: " ✎",
+    marks: [
+      {
+        type: "link",
+        attrs: {
+          href: `term-edit://${encodeURIComponent(entry.term || "")}`,
+        },
+      },
+      { type: "textStyle", attrs: { color: "#6b7280" } },
+    ],
+  };
+
+  if (headingIndex === -1) {
+    return [
+      {
+        type: "paragraph",
+        attrs: { textAlign: "left" },
+        content: [pencilNode],
+      },
+      ...blocks,
+    ];
+  }
+
+  const heading = blocks[headingIndex];
+  heading.content = Array.isArray(heading.content) ? heading.content : [];
+  heading.content.push(pencilNode);
+  blocks[headingIndex] = heading;
+
+  return blocks;
+}
+
 export default function Reader() {
   const router = useRouter();
   const pathname = usePathname();
@@ -160,6 +203,9 @@ export default function Reader() {
   const [selectedThesaurusSynonyms, setSelectedThesaurusSynonyms] = useState([]);
   const [synonymsDialogOpen, setSynonymsDialogOpen] = useState(false);
   const [synonymsDraft, setSynonymsDraft] = useState("");
+  const [thesaurusTermEditSelectionMode, setThesaurusTermEditSelectionMode] =
+    useState(false);
+  const thesaurusTermQueryRef = useRef("");
 
   async function fetchPage(bookName, page, pageSize) {
     const res = await fetch(buildPageUrl(bookName, page, pageSize), {
@@ -230,6 +276,27 @@ export default function Reader() {
       ...((thesaurusSearchResult.entries || []).flatMap((entry) => withSynonymHint(entry))),
     ];
   }, [isThesaurus, edit, pageDoc, thesaurusSearchResult]);
+
+  const thesaurusTermEditPickerContent = useMemo(() => {
+    if (!isThesaurus || !edit) {
+      return pageDoc;
+    }
+
+    return [
+      ...(thesaurusSearchResult.prefix || []),
+      ...((thesaurusSearchResult.entries || []).flatMap((entry) =>
+        thesaurusTermEditSelectionMode
+          ? withTermEditPencil(entry)
+          : entry.blocks || [],
+      )),
+    ];
+  }, [
+    isThesaurus,
+    edit,
+    thesaurusTermEditSelectionMode,
+    pageDoc,
+    thesaurusSearchResult,
+  ]);
 
   const totalThesaurusTerms = useMemo(() => {
     if (!isThesaurus) return 0;
@@ -310,9 +377,14 @@ export default function Reader() {
   }, [edit, editor, isThesaurus, thesaurusEditorOpen]);
 
   useEffect(() => {
+    thesaurusTermQueryRef.current = thesaurusTermQuery;
+  }, [thesaurusTermQuery]);
+
+  useEffect(() => {
     const enteredEditMode = !wasEditRef.current && edit;
 
     if (enteredEditMode && isThesaurus) {
+      setThesaurusTermQuery(thesaurusTermQueryRef.current);
       setThesaurusEditorOpen(false);
       setSelectedThesaurusTerm("");
       setSelectedThesaurusBlocks([]);
@@ -324,6 +396,7 @@ export default function Reader() {
       setThesaurusNameDraft("");
       setThesaurusNameError("");
       setEditingTermLabel("");
+      setThesaurusTermEditSelectionMode(false);
     }
 
     wasEditRef.current = edit;
@@ -376,6 +449,7 @@ export default function Reader() {
       setSelectedThesaurusSynonyms([]);
       setThesaurusEditorOpen(false);
       setEditingTermLabel("");
+      setThesaurusTermEditSelectionMode(false);
       return;
     }
   }, [isThesaurus, pageDoc, setEditingTermLabel]);
@@ -425,6 +499,8 @@ export default function Reader() {
       const contentToRender =
         isThesaurus && !edit
           ? (filteredThesaurusContent || [])
+          : isThesaurus && edit && !thesaurusEditorOpen
+            ? (thesaurusTermEditPickerContent || pageDoc)
           : isThesaurus && edit && thesaurusEditorOpen
             ? (selectedThesaurusBlocks.length
                 ? selectedThesaurusBlocks
@@ -439,7 +515,7 @@ export default function Reader() {
       setIsLoaded(true);
       setIsReadyToScroll(true);
     }
-  }, [editor, pageDoc, loadingBook, loadingPage, isThesaurus, edit, filteredThesaurusContent, selectedThesaurusBlocks]);
+  }, [editor, pageDoc, loadingBook, loadingPage, isThesaurus, edit, filteredThesaurusContent, thesaurusTermEditPickerContent, selectedThesaurusBlocks]);
 
   function openThesaurusEditor(termName) {
     const normalizedTerm = String(termName || "").trim();
@@ -466,6 +542,7 @@ export default function Reader() {
     setSelectedThesaurusSynonyms(termSynonyms);
     setSynonymsDraft(termSynonyms.join(", "));
     setThesaurusEditorOpen(true);
+    setThesaurusTermEditSelectionMode(false);
     setEditingTermLabel(normalizedTerm);
     setThesaurusModalOpen(false);
     setThesaurusNameDraft("");
@@ -482,10 +559,7 @@ export default function Reader() {
 
   function openEditThesaurusTermModal() {
     if (!isThesaurus) return;
-    setThesaurusModalMode("edit");
-    setThesaurusNameDraft("");
-    setThesaurusNameError("");
-    setThesaurusModalOpen(true);
+    setThesaurusTermEditSelectionMode(true);
   }
 
   function confirmThesaurusModal() {
@@ -558,6 +632,7 @@ export default function Reader() {
     setSelectedThesaurusTerm("");
     setSelectedThesaurusBlocks([]);
     setEditingTermLabel("");
+    setThesaurusTermEditSelectionMode(false);
   }
 
   async function save() {
@@ -837,6 +912,14 @@ export default function Reader() {
 
       if (a.dataset.tiptapIgnore === "true") return;
 
+      const rawHref = a.getAttribute("href") || "";
+      if (rawHref.startsWith("term-edit://")) {
+        e.preventDefault();
+        const termName = decodeURIComponent(rawHref.replace("term-edit://", ""));
+        openThesaurusEditor(termName);
+        return;
+      }
+
       const url = toURL(a.getAttribute("href"));
       if (!url) return;
 
@@ -877,7 +960,7 @@ export default function Reader() {
       root.removeEventListener("click", onClick, true);
       root.removeEventListener("mouseenter", onMouseEnter, true);
     };
-  }, [editor, router]);
+  }, [editor, router, openThesaurusEditor]);
 
   return (
     <>
@@ -921,13 +1004,13 @@ export default function Reader() {
       ) : null}
 
       <div ref={containerRef}>
-        {isLoaded && isThesaurus && !edit && (
+        {isLoaded && isThesaurus && (!edit || !thesaurusEditorOpen) && (
           <Box
             sx={{
               mb: 2,
               mt: 1,
               position: "sticky",
-              top: "8.5rem",
+              top: edit ? "14rem" : "8.5rem",
               zIndex: 950,
               backgroundColor: "rgba(248, 244, 239, 0.92)",
               backdropFilter: "blur(4px)",
@@ -974,6 +1057,12 @@ export default function Reader() {
             <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
               Найдено терминов: {visibleThesaurusTerms} из {totalThesaurusTerms}
             </Typography>
+
+            {edit && thesaurusTermEditSelectionMode ? (
+              <Typography variant="body2" sx={{ mt: 0.5, color: "#6b7280" }}>
+                Нажмите на ✎ рядом с нужным видимым термином, чтобы перейти к редактированию.
+              </Typography>
+            ) : null}
 
           </Box>
         )}
