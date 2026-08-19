@@ -650,7 +650,9 @@ export default function Reader() {
         );
         editedPageContent = upsertThesaurusTermBlocks(pageDoc || [], selectedThesaurusTerm, termBlocks);
       } else {
-        editedPageContent = addIdsToHeadings(editedPageContent);
+        // Search and term-selection views show only part of the thesaurus.
+        // Preserve the full document when no individual term is being edited.
+        editedPageContent = pageDoc;
       }
     } else {
       // Ensure all headings have IDs before saving
