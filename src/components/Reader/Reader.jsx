@@ -22,6 +22,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import { useBookContext } from "@/store/BookContext";
 import TipTapButtons from "../Tiptap/TipTapButtons";
 import MenuButton from "../MenuButtons";
+import ThesaurusToc from "../ThesaurusToc";
 import useNearestHeadings from "@/hooks/useNearestHeadings";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
@@ -346,6 +347,12 @@ export default function Reader() {
   const initialPoint = isThesaurus ? null : searchParams.get("point");
   const initialAnchor = isThesaurus ? null : searchParams.get("anchor");
   const initialTerm = isThesaurus ? searchParams.get("term") : null;
+
+  useEffect(() => {
+    if (isThesaurus && initialTerm) {
+      setThesaurusTermQuery("");
+    }
+  }, [isThesaurus, initialTerm]);
 
   useNearestHeadings(setSection, setPoint, fullDoc, pageContext, {
     syncUrl: !isThesaurus,
@@ -1020,42 +1027,48 @@ export default function Reader() {
               p: 1,
             }}
           >
-            <TextField
-              fullWidth
-              label="Поиск по терминам"
-              placeholder="Введите начало термина"
-              value={thesaurusTermQuery}
-              onChange={(e) => setThesaurusTermQuery(e.target.value)}
-              size="small"
-              autoComplete="off"
-              sx={{
-                "& .MuiInputBase-root": {
-                  backgroundColor: "#fff",
-                },
-                "& .MuiInputBase-input": {
-                  fontWeight: 700,
-                  color: "#111",
-                },
-                "& .MuiOutlinedInput-notchedOutline": {
-                  borderColor: "#b81414",
-                  borderWidth: "2px",
-                },
-                "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
-                  borderColor: "#8e1010",
-                },
-                "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                  borderColor: "#8e1010",
-                },
-              }}
-              slotProps={{
-                inputLabel: {
-                  sx: {
-                    color: "#b81414",
-                    fontWeight: 600,
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <TextField
+                fullWidth
+                label="Поиск по терминам"
+                placeholder="Введите начало термина"
+                value={thesaurusTermQuery}
+                onChange={(e) => setThesaurusTermQuery(e.target.value)}
+                size="small"
+                autoComplete="off"
+                sx={{
+                  "& .MuiInputBase-root": {
+                    backgroundColor: "#fff",
                   },
-                },
-              }}
-            />
+                  "& .MuiInputBase-input": {
+                    fontWeight: 700,
+                    color: "#111",
+                  },
+                  "& .MuiOutlinedInput-notchedOutline": {
+                    borderColor: "#b81414",
+                    borderWidth: "2px",
+                  },
+                  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+                    borderColor: "#8e1010",
+                  },
+                  "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                    borderColor: "#8e1010",
+                  },
+                }}
+                slotProps={{
+                  inputLabel: {
+                    sx: {
+                      color: "#b81414",
+                      fontWeight: 600,
+                    },
+                  },
+                }}
+              />
+              <ThesaurusToc
+                buttonText="Указатель"
+                sx={{ ml: 0, minWidth: "120px", height: "40px", whiteSpace: "nowrap" }}
+              />
+            </Box>
             <Typography variant="body2" sx={{ mt: 1, color: "text.secondary" }}>
               Найдено терминов: {visibleThesaurusTerms} из {totalThesaurusTerms}
             </Typography>
