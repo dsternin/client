@@ -242,10 +242,24 @@ export default function ThesaurusToc({
                     color="success"
                     variant="outlined"
                     sx={{
-                      fontWeight: "bold",
-                      fontSize: "12px",
-                      height: "26px",
-                      minWidth: "26px",
+                      fontWeight: 900,
+                      fontSize: "14px",
+                      height: "30px",
+                      minWidth: "30px",
+                      borderRadius: "50%",
+                      border: "2px solid #2e7d32",
+                      backgroundColor: "#e8f5e9",
+                      color: "#1b5e20",
+                      boxShadow: "0 0 0 1px rgba(46, 125, 50, 0.12)",
+                      px: 0.5,
+                      ".MuiChip-label": {
+                        fontWeight: 900,
+                        px: 0,
+                      },
+                      "&:hover": {
+                        backgroundColor: "#d7efd8",
+                        borderColor: "#1b5e20",
+                      },
                     }}
                   />
                 ))}
