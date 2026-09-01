@@ -1147,21 +1147,16 @@ export default function Reader() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={thesaurusDeleteDialogOpen} onClose={() => setThesaurusDeleteDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Удалить термин</DialogTitle>
-        <DialogContent>
-          <List>
-            {thesaurusEntries.map((entry) => (
-              <ListItemButton key={entry.term} onClick={() => confirmDeleteThesaurusTerm(entry.term)}>
-                <ListItemText primary={entry.term} />
-              </ListItemButton>
-            ))}
-          </List>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setThesaurusDeleteDialogOpen(false)}>Закрыть</Button>
-        </DialogActions>
-      </Dialog>
+      <ThesaurusToc
+        open={thesaurusDeleteDialogOpen}
+        buttonText={null}
+        title="Выберите термин для удаления"
+        onClose={() => setThesaurusDeleteDialogOpen(false)}
+        onSelect={(entry) => {
+          const term = typeof entry === "string" ? entry : entry.title || entry.id;
+          confirmDeleteThesaurusTerm(term);
+        }}
+      />
 
       <Dialog open={synonymsDialogOpen} onClose={() => setSynonymsDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Редактировать синонимы</DialogTitle>

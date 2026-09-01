@@ -20,7 +20,6 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
-import { useRouter } from "next/navigation";
 
 export function groupTermsAlphabetically(termsList = []) {
   const sorted = [...termsList].sort((a, b) => {
@@ -54,13 +53,17 @@ export default function ThesaurusToc({
   buttonText = "📖 Тезаурус",
   buttonVariant = "contained",
   sx = {},
+  open: controlledOpen,
+  onClose,
+  onSelect,
+  title = "Термины Тезауруса",
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [terms, setTerms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filterQuery, setFilterQuery] = useState("");
-  const router = useRouter();
+  const open = controlledOpen ?? internalOpen;
 
   const topStickyRef = useRef(null);
   const dialogContentRef = useRef(null);
@@ -70,7 +73,9 @@ export default function ThesaurusToc({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/content/thesaurus/terms", { cache: "no-store" });
+      const res = await fetch(`/api/content/thesaurus/terms?updatedAt=${Date.now()}`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error("Не удалось загрузить термины");
       const data = await res.json();
       setTerms(Array.isArray(data.terms) ? data.terms : []);
@@ -83,14 +88,22 @@ export default function ThesaurusToc({
   };
 
   const handleOpen = () => {
-    setOpen(true);
+    setInternalOpen(true);
     setFilterQuery("");
     fetchTerms();
   };
 
   const handleClose = () => {
-    setOpen(false);
+    if (onClose) onClose();
+    else setInternalOpen(false);
   };
+
+  useEffect(() => {
+    if (controlledOpen) {
+      setFilterQuery("");
+      fetchTerms();
+    }
+  }, [controlledOpen]);
 
   const filteredTerms = useMemo(() => {
     if (!filterQuery.trim()) return terms;
@@ -118,11 +131,15 @@ export default function ThesaurusToc({
 
   const handleTermClick = (item) => {
     const termTitle = typeof item === "string" ? item : item.title || item.id || "";
+    if (onSelect) {
+      onSelect(item);
+      return;
+    }
+    const href = typeof item === "string"
+      ? `/reader?book=thesaurus&term=${encodeURIComponent(termTitle)}`
+      : item.href || `/reader?book=thesaurus&term=${encodeURIComponent(termTitle)}`;
     handleClose();
-    router.push(
-      `/reader?book=thesaurus&term=${encodeURIComponent(termTitle)}`,
-      { scroll: false }
-    );
+    window.location.assign(href);
   };
 
   const scrollToLetter = (letter) => {
@@ -139,23 +156,25 @@ export default function ThesaurusToc({
 
   return (
     <>
-      <Button
-        variant={buttonVariant}
-        onClick={handleOpen}
-        sx={{
-          marginLeft: { xs: 1, sm: 2 },
-          textTransform: "none",
-          fontSize: "16px",
-          backgroundColor: "#2e7d32",
-          color: "#fff",
-          "&:hover": {
-            backgroundColor: "#1b5e20",
-          },
-          ...sx,
-        }}
-      >
-        {buttonText}
-      </Button>
+      {buttonText ? (
+        <Button
+          variant={buttonVariant}
+          onClick={handleOpen}
+          sx={{
+            marginLeft: { xs: 1, sm: 2 },
+            textTransform: "none",
+            fontSize: "16px",
+            backgroundColor: "#2e7d32",
+            color: "#fff",
+            "&:hover": {
+              backgroundColor: "#1b5e20",
+            },
+            ...sx,
+          }}
+        >
+          {buttonText}
+        </Button>
+      ) : null}
 
       <Dialog
         open={open}
@@ -180,7 +199,7 @@ export default function ThesaurusToc({
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <MenuBookIcon sx={{ color: "#2e7d32" }} />
             <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
-              Термины Тезауруса
+              {title}
             </Typography>
           </Box>
           <IconButton

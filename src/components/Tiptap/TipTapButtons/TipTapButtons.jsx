@@ -20,6 +20,7 @@ import ChapterLinkDialog from "@/components/ChapterLinkDialog";
 import { generateHTML } from "@tiptap/html";
 import getEditorExtensions from "@/lib/tiptapExtensions";
 import { useBookContext } from "@/store/BookContext";
+import ThesaurusToc from "@/components/ThesaurusToc";
 import {
   THESAURUS_BOOK_NAME,
   getThesaurusTerms,
@@ -60,34 +61,6 @@ function AnchorLinkDialog({ open, anchors, loading, onClose, onInsert }) {
   );
 }
 
-function ThesaurusTermLinkDialog({ open, terms, loading, onClose, onInsert }) {
-  return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Выберите термин тезауруса</DialogTitle>
-
-      <DialogContent dividers>
-        {loading ? (
-          <Typography>Загрузка терминов...</Typography>
-        ) : !terms.length ? (
-          <Typography>В тезаурусе пока нет терминов</Typography>
-        ) : (
-          <List>
-            {terms.map((term) => (
-              <ListItemButton key={term.id} onClick={() => onInsert(term)}>
-                <ListItemText primary={term.title} />
-              </ListItemButton>
-            ))}
-          </List>
-        )}
-      </DialogContent>
-
-      <DialogActions>
-        <Button onClick={onClose}>Закрыть</Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
 export default function TipTapButtons({
   editor,
   save,
@@ -106,8 +79,6 @@ export default function TipTapButtons({
   const [anchors, setAnchors] = useState([]);
   const [anchorsLoading, setAnchorsLoading] = useState(false);
   const [termLinkDialogOpen, setTermLinkDialogOpen] = useState(false);
-  const [termLinks, setTermLinks] = useState([]);
-  const [termLinksLoading, setTermLinksLoading] = useState(false);
   const [deleteTermDialogOpen, setDeleteTermDialogOpen] = useState(false);
   const [termsToDelete, setTermsToDelete] = useState([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -154,19 +125,8 @@ export default function TipTapButtons({
     setAnchorDialogOpen(false);
   };
 
-  const openTermLinkDialog = async () => {
-    setTermLinksLoading(true);
+  const openTermLinkDialog = () => {
     setTermLinkDialogOpen(true);
-
-    try {
-      const res = await fetch("/api/content/thesaurus/terms");
-      const data = await res.json();
-      setTermLinks(Array.isArray(data?.terms) ? data.terms : []);
-    } catch {
-      setTermLinks([]);
-    } finally {
-      setTermLinksLoading(false);
-    }
   };
 
   const insertTermLink = (term) => {
@@ -602,12 +562,12 @@ export default function TipTapButtons({
         onInsert={insertAnchorLink}
       />
 
-      <ThesaurusTermLinkDialog
+      <ThesaurusToc
         open={termLinkDialogOpen}
-        terms={termLinks}
-        loading={termLinksLoading}
+        buttonText={null}
+        title="Выберите термин тезауруса"
         onClose={() => setTermLinkDialogOpen(false)}
-        onInsert={insertTermLink}
+        onSelect={insertTermLink}
       />
 
     </>

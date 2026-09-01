@@ -8,6 +8,9 @@ import {
   THESAURUS_DEFAULT_SECTION,
 } from "@/lib/thesaurus";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const Book = mongoose.models.Book || mongoose.model("Book", BookSchema);
 
 function normalizeDocContent(chapterData) {
@@ -54,7 +57,10 @@ export async function GET() {
       href: `/reader?book=${THESAURUS_BOOK_NAME}&term=${encodeURIComponent(term)}`,
     }));
 
-    return NextResponse.json({ terms });
+    return NextResponse.json(
+      { terms },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
