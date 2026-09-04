@@ -262,9 +262,9 @@ export default function ThesaurusToc({
                     variant="outlined"
                     sx={{
                       fontWeight: 900,
-                      fontSize: "17px",
-                      height: "36px",
-                      minWidth: "36px",
+                      fontSize: "19px",
+                      height: "38px",
+                      minWidth: "38px",
                       borderRadius: "50%",
                       border: "2px solid #2e7d32",
                       backgroundColor: "#e8f5e9",
@@ -273,7 +273,7 @@ export default function ThesaurusToc({
                       px: 0.5,
                       ".MuiChip-label": {
                         fontWeight: 900,
-                        fontSize: "17px",
+                        fontSize: "19px",
                         px: 0,
                       },
                       "&:hover": {
@@ -319,7 +319,7 @@ export default function ThesaurusToc({
                       borderBottom: "2px solid #2e7d32",
                       pb: 0.5,
                       mb: 1,
-                      fontSize: "1.35rem",
+                      fontSize: "1.5rem",
                       position: "sticky",
                       top: stickyHeaderHeight ? `${stickyHeaderHeight - 16}px` : 0,
                       backgroundColor: "#fff",
@@ -350,7 +350,7 @@ export default function ThesaurusToc({
                           <ListItemText
                             primary={title}
                             primaryTypographyProps={{
-                              fontSize: "17px",
+                              fontSize: "19px",
                               fontWeight: 500,
                             }}
                           />
