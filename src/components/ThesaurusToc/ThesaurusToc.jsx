@@ -107,7 +107,7 @@ export default function ThesaurusToc({
 
   const filteredTerms = useMemo(() => {
     if (!filterQuery.trim()) return terms;
-    const q = filterQuery.trim().toLocaleLowerCase("uk");
+    const q = filterQuery.toLocaleLowerCase("uk");
     return terms.filter((item) => {
       const title = typeof item === "string" ? item : item.title || item.id || "";
       return title.toLocaleLowerCase("uk").includes(q);
