@@ -218,7 +218,14 @@ export default function Reader() {
     }
 
     if (!res.ok) {
-      throw new Error("Failed to load page");
+      let details = "";
+      try {
+        const errorPayload = await res.json();
+        details = errorPayload?.error ? `: ${errorPayload.error}` : "";
+      } catch {
+        // The endpoint may return a non-JSON error response.
+      }
+      throw new Error(`Failed to load page (${res.status})${details}`);
     }
 
     return res.json();

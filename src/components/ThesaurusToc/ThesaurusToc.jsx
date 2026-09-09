@@ -106,11 +106,15 @@ export default function ThesaurusToc({
   }, [controlledOpen]);
 
   const filteredTerms = useMemo(() => {
-    if (!filterQuery.trim()) return terms;
+    if (!filterQuery) return terms;
     const q = filterQuery.toLocaleLowerCase("uk");
     return terms.filter((item) => {
       const title = typeof item === "string" ? item : item.title || item.id || "";
-      return title.toLocaleLowerCase("uk").includes(q);
+      const synonyms = typeof item === "string" ? [] : item.synonyms || [];
+      return (
+        title.toLocaleLowerCase("uk").includes(q) ||
+        synonyms.some((synonym) => String(synonym).toLocaleLowerCase("uk").includes(q))
+      );
     });
   }, [terms, filterQuery]);
 

@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { BookSchema, ensureThesaurusBook } from "../../books/route";
 import { loadChapter } from "../../chapters/route";
 import {
-  getThesaurusTerms,
+  getThesaurusEntries,
   THESAURUS_BOOK_NAME,
   THESAURUS_DEFAULT_SECTION,
 } from "@/lib/thesaurus";
@@ -50,12 +50,22 @@ export async function GET() {
       }
     }
 
-    const uniqueTerms = Array.from(new Set(getThesaurusTerms(allContent)));
-    const terms = uniqueTerms.map((term) => ({
-      id: term,
-      title: term,
-      href: `/reader?book=${THESAURUS_BOOK_NAME}&term=${encodeURIComponent(term)}`,
-    }));
+    const entriesByTerm = new Map();
+    for (const entry of getThesaurusEntries(allContent).terms) {
+      if (!entry.term) continue;
+
+      const existing = entriesByTerm.get(entry.term);
+      entriesByTerm.set(entry.term, {
+        id: entry.term,
+        title: entry.term,
+        synonyms: Array.from(
+          new Set([...(existing?.synonyms || []), ...(entry.synonyms || [])]),
+        ),
+        href: `/reader?book=${THESAURUS_BOOK_NAME}&term=${encodeURIComponent(entry.term)}`,
+      });
+    }
+
+    const terms = Array.from(entriesByTerm.values());
 
     return NextResponse.json(
       { terms },

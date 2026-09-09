@@ -99,7 +99,7 @@ export function filterThesaurusContentByPrefix(content = [], query = "") {
 }
 
 export function findThesaurusEntriesByPrefix(content = [], query = "") {
-  const normalized = String(query || "").trim().toLocaleLowerCase("uk");
+  const normalized = String(query || "").toLocaleLowerCase("uk");
   const { prefix, terms } = splitThesaurusEntries(content);
   const sortedTerms = sortTermEntries(terms);
 
