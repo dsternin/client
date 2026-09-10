@@ -698,7 +698,14 @@ export default function Reader() {
     });
 
     if (!res.ok) {
-      alert("Ошибка при сохранении страницы");
+      let message = "Ошибка при сохранении страницы";
+      try {
+        const errorPayload = await res.json();
+        if (errorPayload?.error) message = errorPayload.error;
+      } catch {
+        // Keep the generic message when the server response is not JSON.
+      }
+      alert(message);
       return;
     }
 

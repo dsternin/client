@@ -8,6 +8,7 @@ import {
   syncChapterAnchors,
 } from "../chapters/route";
 import {
+  getThesaurusEntries,
   sortThesaurusContent,
   THESAURUS_BOOK_NAME,
   THESAURUS_DEFAULT_SECTION,
@@ -24,6 +25,10 @@ function parseInteger(value, fallback) {
 
 function createDocument(content) {
   return { type: "doc", content };
+}
+
+function countThesaurusTerms(content = []) {
+  return getThesaurusEntries(content).terms.filter((entry) => entry.term).length;
 }
 
 function extractText(node) {
@@ -496,6 +501,26 @@ export async function POST(req) {
 
     const normalizedContent =
       book === THESAURUS_BOOK_NAME ? sortThesaurusContent(content) : content;
+
+    if (book === THESAURUS_BOOK_NAME) {
+      const currentBook = await readBookChapters(book);
+      const currentContent = currentBook?.chapters.flatMap((chapter) => chapter.content) || [];
+      const currentTermCount = countThesaurusTerms(currentContent);
+      const nextTermCount = countThesaurusTerms(normalizedContent);
+      const removedTermCount = currentTermCount - nextTermCount;
+
+      if (removedTermCount > 2) {
+        return NextResponse.json(
+          {
+            error: "Сохранение заблокировано: удаление более 2 терминов за один раз запрещено",
+            currentTermCount,
+            nextTermCount,
+            removedTermCount,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     const normalizedPageSize =
       book === THESAURUS_BOOK_NAME
