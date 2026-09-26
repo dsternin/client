@@ -1,80 +1,57 @@
-"use client";
-
 import "@fontsource/cormorant-garamond/700.css";
 import "./globals.css";
 
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import theme from "@/styles/theme";
+import ClientProviders from "@/components/ClientProviders";
+import { getConfiguredSiteUrl } from "@/lib/siteUrl";
 
-import { ThemeProvider } from "@mui/material";
-import { AuthProvider } from "@/store/AuthContext";
-import { BookContextProvider } from "@/store/BookContext";
-import BookInfoPanel from "@/components/BookInfoPanel";
+const siteUrl = getConfiguredSiteUrl();
 
-import { Suspense, useEffect } from "react";
-import Script from "next/script";
-import { usePathname } from "next/navigation";
-
-const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
-
-function GATrackPageView() {
-  const pathname = usePathname();
-
-  useEffect(() => {
-    if (!GA_ID) return;
-    if (typeof window === "undefined") return;
-    if (typeof window.gtag !== "function") return;
-
-    const url = pathname + (window.location.search || "");
-
-    window.gtag("config", GA_ID, { page_path: url });
-  }, [pathname]);
-
-  return null;
-}
+export const metadata = {
+  metadataBase: siteUrl || undefined,
+  title: {
+    default: "Трикнижье",
+    template: "%s | Трикнижье",
+  },
+  applicationName: "Трикнижье",
+  description:
+    "Электронная библиотека «Трикнижье»: книги, главы и удобный поиск по текстам.",
+  icons: {
+    icon: "/favicon.svg",
+  },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    siteName: "Трикнижье",
+    title: "Трикнижье",
+    description:
+      "Электронная библиотека «Трикнижье»: книги, главы и удобный поиск по текстам.",
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Трикнижье",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Трикнижье",
+    description:
+      "Электронная библиотека «Трикнижье»: книги, главы и удобный поиск по текстам.",
+    images: ["/opengraph-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <head>
-        {GA_ID ? (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
-              strategy="afterInteractive"
-            />
-            <Script id="ga4-init" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                window.gtag = gtag;
-                gtag('js', new Date());
-                gtag('config', '${GA_ID}', { anonymize_ip: true });
-              `}
-            </Script>
-          </>
-        ) : null}
-      </head>
-
+    <html lang="ru">
       <body className="layout">
-        <GATrackPageView />
-
-        <AuthProvider>
-          <Suspense fallback={null}>
-            <BookContextProvider>
-              <ThemeProvider theme={theme}>
-                <div className="stickyHeaderWrapper">
-                  <Header />
-                  <BookInfoPanel />
-                </div>
-
-                <main className="content">{children}</main>
-                <Footer />
-              </ThemeProvider>
-            </BookContextProvider>
-          </Suspense>
-        </AuthProvider>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );
