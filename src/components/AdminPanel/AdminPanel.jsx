@@ -95,18 +95,36 @@ export default function AdminPanel() {
           }}
         >
           {[
-            ["Сегодня", stats?.analytics?.today],
-            ["Последние 7 дней", stats?.analytics?.week],
-            ["Последние 30 дней", stats?.analytics?.month],
-            ["Зарегистрировано аккаунтов", stats?.registeredUsersCount],
-          ].map(([label, value]) => (
+            { label: "Сегодня", value: stats?.analytics?.today },
+            { label: "Последние 7 дней", value: stats?.analytics?.week },
+            { label: "Последние 30 дней", value: stats?.analytics?.month },
+            {
+              label: "Последние 365 дней",
+              value: stats?.analytics?.year
+                ? `${stats.analytics.year.active} / ${stats.analytics.year.unique}`
+                : "—",
+              description: "Активные / все уникальные",
+            },
+            {
+              label: "Зарегистрировано аккаунтов",
+              value: stats?.registeredUsersCount,
+            },
+          ].map(({ label, value, description }) => (
             <Paper key={label} variant="outlined" sx={{ p: 2 }}>
               <Typography variant="body2" color="text.secondary">
                 {label}
               </Typography>
-              <Typography variant="h4" sx={{ mt: 1 }}>
+              <Typography
+                variant={description ? "h5" : "h4"}
+                sx={{ mt: 1, ...(description ? { whiteSpace: "nowrap" } : {}) }}
+              >
                 {value ?? "—"}
               </Typography>
+              {description && (
+                <Typography variant="caption" color="text.secondary">
+                  {description}
+                </Typography>
+              )}
             </Paper>
           ))}
         </Box>

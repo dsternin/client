@@ -23,6 +23,23 @@ async function getActiveUsers(authClient, propertyId, startDate, endDate) {
   return Number(data.rows?.[0]?.metricValues?.[0]?.value || 0);
 }
 
+async function getYearlyUserCounts(authClient, propertyId) {
+  const { data } = await authClient.request({
+    url: `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+    method: "POST",
+    data: {
+      dateRanges: [{ startDate: "365daysAgo", endDate: "yesterday" }],
+      metrics: [{ name: "activeUsers" }, { name: "totalUsers" }],
+    },
+  });
+
+  const values = data.rows?.[0]?.metricValues || [];
+  return {
+    active: Number(values[0]?.value || 0),
+    unique: Number(values[1]?.value || 0),
+  };
+}
+
 function getAnalyticsAuthClient() {
   const projectNumber = process.env.GCP_PROJECT_NUMBER;
   const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
@@ -90,13 +107,14 @@ export async function GET() {
 
     if (propertyId && authClient) {
       try {
-        const [today, week, month] = await Promise.all([
+        const [today, week, month, year] = await Promise.all([
           getActiveUsers(authClient, propertyId, "today", "today"),
           getActiveUsers(authClient, propertyId, "7daysAgo", "yesterday"),
           getActiveUsers(authClient, propertyId, "30daysAgo", "yesterday"),
+          getYearlyUserCounts(authClient, propertyId),
         ]);
 
-        analytics = { today, week, month };
+        analytics = { today, week, month, year };
         analyticsStatus = "ok";
       } catch (error) {
         console.error("GA4 admin report request failed:", error.message);
