@@ -95,15 +95,25 @@ export default function AdminPanel() {
           }}
         >
           {[
-            { label: "Сегодня", value: stats?.analytics?.today },
-            { label: "Последние 7 дней", value: stats?.analytics?.week },
-            { label: "Последние 30 дней", value: stats?.analytics?.month },
+            {
+              label: "Сегодня",
+              value: stats?.analytics?.today,
+              description: "Сеансы / уникальные пользователи",
+            },
+            {
+              label: "Последние 7 дней",
+              value: stats?.analytics?.week,
+              description: "Сеансы / уникальные пользователи",
+            },
+            {
+              label: "Последние 30 дней",
+              value: stats?.analytics?.month,
+              description: "Сеансы / уникальные пользователи",
+            },
             {
               label: "Последние 365 дней",
-              value: stats?.analytics?.year
-                ? `${stats.analytics.year.active} / ${stats.analytics.year.unique}`
-                : "—",
-              description: "Активные / все уникальные",
+              value: stats?.analytics?.year,
+              description: "Сеансы / уникальные пользователи",
             },
             {
               label: "Зарегистрировано аккаунтов",
@@ -118,7 +128,11 @@ export default function AdminPanel() {
                 variant={description ? "h5" : "h4"}
                 sx={{ mt: 1, ...(description ? { whiteSpace: "nowrap" } : {}) }}
               >
-                {value ?? "—"}
+                {description
+                  ? value
+                    ? `${value.visits} / ${value.unique}`
+                    : "—"
+                  : value ?? "—"}
               </Typography>
               {description && (
                 <Typography variant="caption" color="text.secondary">

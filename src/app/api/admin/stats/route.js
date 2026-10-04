@@ -10,32 +10,19 @@ import dbConnect from "@/lib/db";
 const User = mongoose.models.User || mongoose.model("User", UserSchema);
 const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
-async function getActiveUsers(authClient, propertyId, startDate, endDate) {
+async function getVisitCounts(authClient, propertyId, startDate, endDate) {
   const { data } = await authClient.request({
     url: `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
     method: "POST",
     data: {
       dateRanges: [{ startDate, endDate }],
-      metrics: [{ name: "activeUsers" }],
-    },
-  });
-
-  return Number(data.rows?.[0]?.metricValues?.[0]?.value || 0);
-}
-
-async function getYearlyUserCounts(authClient, propertyId) {
-  const { data } = await authClient.request({
-    url: `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
-    method: "POST",
-    data: {
-      dateRanges: [{ startDate: "365daysAgo", endDate: "yesterday" }],
-      metrics: [{ name: "activeUsers" }, { name: "totalUsers" }],
+      metrics: [{ name: "sessions" }, { name: "totalUsers" }],
     },
   });
 
   const values = data.rows?.[0]?.metricValues || [];
   return {
-    active: Number(values[0]?.value || 0),
+    visits: Number(values[0]?.value || 0),
     unique: Number(values[1]?.value || 0),
   };
 }
@@ -108,10 +95,10 @@ export async function GET() {
     if (propertyId && authClient) {
       try {
         const [today, week, month, year] = await Promise.all([
-          getActiveUsers(authClient, propertyId, "today", "today"),
-          getActiveUsers(authClient, propertyId, "7daysAgo", "yesterday"),
-          getActiveUsers(authClient, propertyId, "30daysAgo", "yesterday"),
-          getYearlyUserCounts(authClient, propertyId),
+          getVisitCounts(authClient, propertyId, "today", "today"),
+          getVisitCounts(authClient, propertyId, "7daysAgo", "yesterday"),
+          getVisitCounts(authClient, propertyId, "30daysAgo", "yesterday"),
+          getVisitCounts(authClient, propertyId, "365daysAgo", "yesterday"),
         ]);
 
         analytics = { today, week, month, year };
