@@ -34,6 +34,9 @@ export async function POST(req) {
       return NextResponse.json({ error: "Неверный пароль" }, { status: 401 });
     }
 
+    user.lastLoginAt = new Date();
+    await user.save();
+
     const token = createToken(user._id);
 
     const response = NextResponse.json({ message: "Успешный вход" });

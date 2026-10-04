@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import styles from "./Header.module.css";
-import { Typography } from "@mui/material";
+import { Button, Typography } from "@mui/material";
 import { Link as MuiLink } from "@mui/material";
 import { useEffect, useState } from "react";
 import LinkButton from "../LinkButton";
@@ -33,6 +33,27 @@ export default function Header() {
           </Typography>
         </MuiLink>
         <BooksToc />
+        {mounted && loaded && user?.role === "admin" && (
+          <Button
+            onClick={() => router.push("/admin")}
+            variant="contained"
+            sx={{
+              ml: 1,
+              px: 2,
+              borderRadius: 1,
+              backgroundColor: "#5f8f5a",
+              color: "#fff",
+              textTransform: "none",
+              boxShadow: "none",
+              "&:hover": {
+                backgroundColor: "#4f7d4c",
+                boxShadow: "none",
+              },
+            }}
+          >
+            Статистика
+          </Button>
+        )}
         <div style={{ marginLeft: "auto" }}>
           {!mounted || !loaded ? null : user ? (
             <>
