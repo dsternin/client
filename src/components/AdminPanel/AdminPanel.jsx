@@ -135,8 +135,12 @@ export default function AdminPanel() {
                   : value ?? "—"}
               </Typography>
               {description && (
-                <Typography variant="caption" color="text.secondary">
-                  {description}
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontSize: "0.72rem" }}
+                >
+                  Сеансы / уникальные{"\u00a0"}пользователи
                 </Typography>
               )}
             </Paper>
