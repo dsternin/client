@@ -46,7 +46,7 @@ function getAnalyticsAuthClient() {
       `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/` +
       `${serviceAccountEmail}:generateAccessToken`,
     subject_token_supplier: {
-      getSubjectToken: getVercelOidcToken,
+      getSubjectToken: () => getVercelOidcToken(),
     },
   });
 
