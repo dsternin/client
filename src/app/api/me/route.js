@@ -19,11 +19,22 @@ export async function GET() {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const { userId } = decoded;
     await dbConnect();
-    const { name, email, role } = await User.findById(userId).select(
-      "name email role"
-    );
+    const user = await User.findById(userId).select("name email role");
+    if (!user) return NextResponse.json({ user: null }, { status: 401 });
 
-    const response = NextResponse.json({ user: { userId, email, name, role } });
+    if (user.role === "admin") {
+      user.lastActivityAt = new Date();
+      await user.save();
+    }
+
+    const response = NextResponse.json({
+      user: {
+        userId,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    });
     setAuthCookie(response, createToken(userId));
 
     return response;

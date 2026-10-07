@@ -5,6 +5,7 @@ export const UserSchema = new mongoose.Schema({
   email: { type: String, unique: true },
   password: String,
   lastLoginAt: { type: Date, default: null },
+  lastActivityAt: { type: Date, default: null },
   role: {
     type: String,
     enum: ["user", "admin"],

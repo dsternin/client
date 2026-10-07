@@ -35,6 +35,7 @@ export async function POST(req) {
     }
 
     user.lastLoginAt = new Date();
+    user.lastActivityAt = user.lastLoginAt;
     await user.save();
 
     const token = createToken(user._id);

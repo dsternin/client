@@ -27,6 +27,19 @@ async function getVisitCounts(authClient, propertyId, startDate, endDate) {
   };
 }
 
+async function getRecentActiveUsers(authClient, propertyId) {
+  const { data } = await authClient.request({
+    url: `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runRealtimeReport`,
+    method: "POST",
+    data: {
+      minuteRanges: [{ startMinutesAgo: 4, endMinutesAgo: 0 }],
+      metrics: [{ name: "activeUsers" }],
+    },
+  });
+
+  return Number(data.rows?.[0]?.metricValues?.[0]?.value || 0);
+}
+
 function getAnalyticsAuthClient() {
   const projectNumber = process.env.GCP_PROJECT_NUMBER;
   const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
@@ -79,10 +92,13 @@ export async function GET() {
       return NextResponse.json({ error: "Доступ запрещен" }, { status: 403 });
     }
 
+    admin.lastActivityAt = new Date();
+    await admin.save();
+
     const [registeredUsersCount, users] = await Promise.all([
       User.countDocuments({}),
       User.find({})
-        .select("name email role lastLoginAt")
+        .select("name email role lastLoginAt lastActivityAt")
         .sort({ lastLoginAt: -1, name: 1 })
         .lean(),
     ]);
@@ -94,14 +110,18 @@ export async function GET() {
 
     if (propertyId && authClient) {
       try {
-        const [today, week, month, year] = await Promise.all([
+        const [today, week, month, year, activeUsersLast5Minutes] = await Promise.all([
           getVisitCounts(authClient, propertyId, "today", "today"),
           getVisitCounts(authClient, propertyId, "7daysAgo", "yesterday"),
           getVisitCounts(authClient, propertyId, "30daysAgo", "yesterday"),
           getVisitCounts(authClient, propertyId, "365daysAgo", "yesterday"),
+          getRecentActiveUsers(authClient, propertyId).catch((error) => {
+            console.error("GA4 realtime request failed:", error.message);
+            return null;
+          }),
         ]);
 
-        analytics = { today, week, month, year };
+        analytics = { today, week, month, year, activeUsersLast5Minutes };
         analyticsStatus = "ok";
       } catch (error) {
         console.error("GA4 admin report request failed:", error.message);
