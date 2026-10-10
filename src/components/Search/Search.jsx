@@ -64,9 +64,11 @@ export default function Search({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [dragPosition, setDragPosition] = useState(null);
 
   const abortRef = useRef(null);
   const requestIdRef = useRef(0);
+  const dragStartRef = useRef(null);
 
   useEffect(() => {
     onOpenChange?.(open);
@@ -322,6 +324,41 @@ export default function Search({
   const currentBook = booksMatches.find((b) => b.name === book) || {};
   const currentLabel = currentBook.label || book;
 
+  const handleDragStart = (event) => {
+    if (event.button !== 0 || event.target.closest("button")) return;
+
+    const { left, top } = event.currentTarget
+      .closest("[data-search-window]")
+      .getBoundingClientRect();
+    dragStartRef.current = {
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      left,
+      top,
+    };
+    setDragPosition({ left, top });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleDrag = (event) => {
+    const dragStart = dragStartRef.current;
+    if (!dragStart) return;
+
+    const panel = event.currentTarget
+      .closest("[data-search-window]")
+      .getBoundingClientRect();
+    const left = dragStart.left + event.clientX - dragStart.pointerX;
+    const top = dragStart.top + event.clientY - dragStart.pointerY;
+    setDragPosition({
+      left: Math.min(Math.max(0, left), Math.max(0, window.innerWidth - panel.width)),
+      top: Math.min(Math.max(0, top), Math.max(0, window.innerHeight - panel.height)),
+    });
+  };
+
+  const handleDragEnd = () => {
+    dragStartRef.current = null;
+  };
+
   const handleBulkReplace = async () => {
     const searchValue = (queryInput || "").trim();
 
@@ -387,10 +424,15 @@ export default function Search({
     <>
       {open && (
         <Box
+          data-search-window
           sx={{
             position: "fixed",
-            bottom: 72,
-            right: 16,
+            ...(dragPosition
+              ? {
+                  left: dragPosition.left,
+                  top: dragPosition.top,
+                }
+              : { bottom: 72, right: 16 }),
             width: { xs: "calc(100vw - 32px)", sm: 500 },
             p: 2,
             bgcolor: "background.paper",
@@ -399,7 +441,20 @@ export default function Search({
             zIndex: 1000,
           }}
         >
-          <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+          <Box
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDrag}
+            onPointerUp={handleDragEnd}
+            onPointerCancel={handleDragEnd}
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              mb: 1,
+              cursor: "grab",
+              touchAction: "none",
+              userSelect: "none",
+            }}
+          >
             <Typography variant="h6">Поиск по книгам</Typography>
             <IconButton size="small" onClick={handleClose}>
               <CloseIcon />
