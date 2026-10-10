@@ -187,6 +187,7 @@ export default function Reader() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalBlocks, setTotalBlocks] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isReadyToScroll, setIsReadyToScroll] = useState(false);
   const [loadingBook, setLoadingBook] = useState(false);
   const [loadingPage, setLoadingPage] = useState(false);
@@ -996,6 +997,7 @@ export default function Reader() {
             goToMatch={goToMatch}
             isLoaded={isLoaded}
             onReloadCurrentBook={reloadCurrentBook}
+            onOpenChange={setIsSearchOpen}
           />
         )
       ) : (
@@ -1235,7 +1237,7 @@ export default function Reader() {
             </>
           )}
 
-          {isLoaded && !edit && (
+          {isLoaded && !edit && !isSearchOpen && (
             <Button
               variant="contained"
               startIcon={<SearchIcon />}

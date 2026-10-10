@@ -38,6 +38,7 @@ export default function Search({
   isLoaded,
   fullDoc,
   onReloadCurrentBook,
+  onOpenChange,
 }) {
   const { user } = useAuth();
   const isAdmin = user?.role == "admin";
@@ -66,6 +67,10 @@ export default function Search({
 
   const abortRef = useRef(null);
   const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   const scheduleEditorCommand = (command) => {
     Promise.resolve().then(() => {
@@ -115,8 +120,9 @@ export default function Search({
   useEffect(() => {
     return () => {
       abortRef.current?.abort?.();
+      onOpenChange?.(false);
     };
-  }, []);
+  }, [onOpenChange]);
 
   useEffect(() => {
     if (!open || !editor || !isLoaded || !fullDoc) return;
@@ -383,8 +389,8 @@ export default function Search({
         <Box
           sx={{
             position: "fixed",
-            bottom: 16,
-            right: "20%",
+            bottom: 72,
+            right: 16,
             width: 500,
             p: 2,
             bgcolor: "background.paper",
