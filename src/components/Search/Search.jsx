@@ -391,7 +391,7 @@ export default function Search({
             position: "fixed",
             bottom: 72,
             right: 16,
-            width: 500,
+            width: { xs: "calc(100vw - 32px)", sm: 500 },
             p: 2,
             bgcolor: "background.paper",
             borderRadius: 2,
