@@ -74,6 +74,10 @@ export default function Search({
     onOpenChange?.(open);
   }, [open, onOpenChange]);
 
+  useEffect(() => {
+    if (open) setDragPosition(null);
+  }, [open]);
+
   const scheduleEditorCommand = (command) => {
     Promise.resolve().then(() => {
       try {
@@ -431,8 +435,9 @@ export default function Search({
               ? {
                   left: dragPosition.left,
                   top: dragPosition.top,
+                  transform: "none",
                 }
-              : { bottom: 72, right: 16 }),
+              : { top: 16, left: "50%", transform: "translateX(-50%)" }),
             width: { xs: "calc(100vw - 32px)", sm: 500 },
             p: 2,
             bgcolor: "background.paper",
