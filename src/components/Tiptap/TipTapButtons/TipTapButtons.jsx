@@ -11,6 +11,7 @@ import {
   List,
   ListItemButton,
   ListItemText,
+  CircularProgress,
   Typography,
 } from "@mui/material";
 import TextBoxControls from "../extensions/TextBoxControl";
@@ -26,6 +27,71 @@ import {
   getThesaurusTerms,
   removeThesaurusTerm,
 } from "@/lib/thesaurus";
+
+const MAX_GRAMMAR_CHECK_LENGTH = 20_000;
+
+function getEditorTextWithPositions(editor) {
+  const characters = [];
+  const positions = [];
+  let blockCount = 0;
+
+  editor.state.doc.descendants((node, position) => {
+    if (!node.isTextblock) return true;
+
+    if (blockCount > 0) {
+      characters.push("\n");
+      positions.push(null);
+    }
+    blockCount += 1;
+
+    node.descendants((child, childPosition) => {
+      if (child.isText) {
+        for (let index = 0; index < child.text.length; index += 1) {
+          characters.push(child.text[index]);
+          positions.push(position + 1 + childPosition + index);
+        }
+      } else if (child.type.name === "hardBreak") {
+        characters.push("\n");
+        positions.push(null);
+      }
+    });
+
+    return false;
+  });
+
+  return { text: characters.join(""), positions };
+}
+
+function mapGrammarMatches(matches, positions) {
+  return matches.map((match) => {
+    const { offset, length } = match;
+    let from = null;
+    let to = null;
+
+    if (
+      Number.isInteger(offset) &&
+      Number.isInteger(length) &&
+      offset >= 0 &&
+      length > 0 &&
+      offset + length <= positions.length
+    ) {
+      const matchPositions = positions.slice(offset, offset + length);
+      const firstPosition = matchPositions[0];
+      const isContiguous =
+        Number.isInteger(firstPosition) &&
+        matchPositions.every(
+          (position, index) => position === firstPosition + index,
+        );
+
+      if (isContiguous) {
+        from = firstPosition;
+        to = firstPosition + length;
+      }
+    }
+
+    return { ...match, from, to };
+  });
+}
 
 function AnchorLinkDialog({ open, anchors, loading, onClose, onInsert }) {
   return (
@@ -83,6 +149,10 @@ export default function TipTapButtons({
   const [termsToDelete, setTermsToDelete] = useState([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [pendingDeleteTerm, setPendingDeleteTerm] = useState("");
+  const [grammarDialogOpen, setGrammarDialogOpen] = useState(false);
+  const [grammarChecking, setGrammarChecking] = useState(false);
+  const [grammarError, setGrammarError] = useState("");
+  const [grammarMatches, setGrammarMatches] = useState([]);
 
   const isThesaurus = book === THESAURUS_BOOK_NAME;
   const showThesaurusTermActions = isThesaurus && !termEditorMode;
@@ -144,6 +214,79 @@ export default function TipTapButtons({
 
   const handleExport = () => {
     save();
+  };
+
+  const checkGrammar = async () => {
+    if (!editor) return;
+
+    let { text, positions } = getEditorTextWithPositions(editor);
+    const { from, to } = editor.state.selection;
+    if (from !== to) {
+      const selectedIndexes = positions.reduce((indexes, position, index) => {
+        if (Number.isInteger(position) && position >= from && position < to) {
+          indexes.push(index);
+        }
+        return indexes;
+      }, []);
+
+      if (selectedIndexes.length) {
+        const start = selectedIndexes[0];
+        const end = selectedIndexes[selectedIndexes.length - 1] + 1;
+        text = text.slice(start, end);
+        positions = positions.slice(start, end);
+      }
+    }
+
+    if (!text.trim()) {
+      setGrammarMatches([]);
+      setGrammarError("В редакторе нет текста для проверки.");
+      setGrammarDialogOpen(true);
+      return;
+    }
+    if (text.length > MAX_GRAMMAR_CHECK_LENGTH) {
+      setGrammarMatches([]);
+      setGrammarError(
+        "Выделите фрагмент или сократите текст в редакторе до 20 000 символов.",
+      );
+      setGrammarDialogOpen(true);
+      return;
+    }
+
+    setGrammarDialogOpen(true);
+    setGrammarChecking(true);
+    setGrammarError("");
+    setGrammarMatches([]);
+
+    try {
+      const response = await fetch("/api/grammar-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Не удалось проверить текст.");
+      }
+
+      setGrammarMatches(mapGrammarMatches(data.matches || [], positions));
+    } catch (error) {
+      setGrammarError(error.message || "Не удалось проверить текст.");
+    } finally {
+      setGrammarChecking(false);
+    }
+  };
+
+  const applyGrammarSuggestion = (match, replacement) => {
+    if (!editor || match.from === null || match.to === null) return;
+
+    editor
+      .chain()
+      .focus()
+      .insertContentAt({ from: match.from, to: match.to }, replacement)
+      .run();
+
+    void checkGrammar();
   };
 
   const handleExportToPDF = async () => {
@@ -409,6 +552,15 @@ export default function TipTapButtons({
           backdropFilter: "blur(4px)",
         }}
       >
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={checkGrammar}
+          disabled={!editor || grammarChecking}
+        >
+          Проверить грамматику
+        </Button>
+
         {isThesaurus && termEditorMode ? (
           <Button variant="contained" color="secondary" onClick={onEditSynonyms}>
             Редактировать синонимы
@@ -569,6 +721,66 @@ export default function TipTapButtons({
         onClose={() => setTermLinkDialogOpen(false)}
         onSelect={insertTermLink}
       />
+
+      <Dialog
+        open={grammarDialogOpen}
+        onClose={() => setGrammarDialogOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Проверка русского текста</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
+            Текст отправляется на проверку в LanguageTool.
+          </Typography>
+          {grammarChecking ? (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <CircularProgress size={20} />
+              <Typography>Проверяем текст…</Typography>
+            </Box>
+          ) : grammarError ? (
+            <Typography color="error">{grammarError}</Typography>
+          ) : grammarMatches.length === 0 ? (
+            <Typography>LanguageTool не нашёл ошибок.</Typography>
+          ) : (
+            <List disablePadding>
+              {grammarMatches.map((match, index) => (
+                <Box key={`${match.offset}-${match.length}-${index}`}>
+                  {index > 0 ? <Box sx={{ borderTop: 1, borderColor: "divider", my: 1.5 }} /> : null}
+                  <Typography fontWeight={600}>{match.message}</Typography>
+                  {match.context?.text ? (
+                    <Typography variant="body2" sx={{ mt: 0.5, color: "text.secondary" }}>
+                      {match.context.text}
+                    </Typography>
+                  ) : null}
+                  {match.replacements?.length ? (
+                    <List disablePadding sx={{ mt: 0.5 }}>
+                      {match.replacements.map((replacement, replacementIndex) => (
+                        <ListItemButton
+                          key={`${replacement.value}-${replacementIndex}`}
+                          disabled={
+                            grammarChecking || match.from === null || match.to === null
+                          }
+                          onClick={() => applyGrammarSuggestion(match, replacement.value)}
+                        >
+                          <ListItemText primary={replacement.value} />
+                        </ListItemButton>
+                      ))}
+                    </List>
+                  ) : (
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      Вариант исправления не предложен.
+                    </Typography>
+                  )}
+                </Box>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setGrammarDialogOpen(false)}>Закрыть</Button>
+        </DialogActions>
+      </Dialog>
 
     </>
   );
