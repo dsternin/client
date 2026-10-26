@@ -85,7 +85,11 @@ export async function POST(request) {
         offset: match.offset,
         length: match.length,
         context: match.context
-          ? { text: match.context.text }
+          ? {
+              text: match.context.text,
+              offset: match.context.offset,
+              length: match.context.length,
+            }
           : undefined,
         replacements: Array.isArray(match.replacements)
           ? match.replacements

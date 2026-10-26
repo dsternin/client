@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import TextBoxControls from "../extensions/TextBoxControl";
 import { rainbowColors } from "@/lib/colors";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ChapterLinkDialog from "@/components/ChapterLinkDialog";
 import { generateHTML } from "@tiptap/html";
 import getEditorExtensions from "@/lib/tiptapExtensions";
@@ -29,6 +29,49 @@ import {
 } from "@/lib/thesaurus";
 
 const MAX_GRAMMAR_CHECK_LENGTH = 20_000;
+const IGNORED_GRAMMAR_PHRASES_KEY = "ignoredGrammarPhrases";
+
+function normalizeGrammarPhrase(phrase) {
+  return phrase.trim().toLocaleLowerCase("ru-RU");
+}
+
+function getReplacementLabel(value) {
+  if (value.length === 0) return "Удалить фрагмент";
+  if (/^ +$/u.test(value)) {
+    const count = value.length;
+    const word =
+      count % 10 === 1 && count % 100 !== 11
+        ? "пробел"
+        : count % 10 >= 2 &&
+            count % 10 <= 4 &&
+            (count % 100 < 12 || count % 100 > 14)
+          ? "пробела"
+          : "пробелов";
+    return `Заменить на ${count} ${word}`;
+  }
+
+  return value;
+}
+
+function maskIgnoredPhrases(text, ignoredPhrases) {
+  let maskedText = text;
+
+  for (const phrase of ignoredPhrases) {
+    if (!phrase) continue;
+
+    const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    maskedText = maskedText.replace(
+      new RegExp(
+        `(^|[^\\p{L}\\p{N}_])(${escapedPhrase})(?=$|[^\\p{L}\\p{N}_])`,
+        "giu",
+      ),
+      (match, precedingCharacter, phraseMatch) =>
+        `${precedingCharacter}${" ".repeat(phraseMatch.length)}`,
+    );
+  }
+
+  return maskedText;
+}
 
 function getEditorTextWithPositions(editor) {
   const characters = [];
@@ -62,7 +105,7 @@ function getEditorTextWithPositions(editor) {
   return { text: characters.join(""), positions };
 }
 
-function mapGrammarMatches(matches, positions) {
+function mapGrammarMatches(matches, positions, text) {
   return matches.map((match) => {
     const { offset, length } = match;
     let from = null;
@@ -89,7 +132,19 @@ function mapGrammarMatches(matches, positions) {
       }
     }
 
-    return { ...match, from, to };
+    return {
+      ...match,
+      from,
+      to,
+      issueText:
+        Number.isInteger(offset) &&
+        Number.isInteger(length) &&
+        offset >= 0 &&
+        length > 0 &&
+        offset + length <= text.length
+          ? text.slice(offset, offset + length)
+          : "",
+    };
   });
 }
 
@@ -153,9 +208,33 @@ export default function TipTapButtons({
   const [grammarChecking, setGrammarChecking] = useState(false);
   const [grammarError, setGrammarError] = useState("");
   const [grammarMatches, setGrammarMatches] = useState([]);
+  const [ignoredPhrases, setIgnoredPhrases] = useState([]);
+  const [ignoredPhrasesReady, setIgnoredPhrasesReady] = useState(false);
 
   const isThesaurus = book === THESAURUS_BOOK_NAME;
   const showThesaurusTermActions = isThesaurus && !termEditorMode;
+
+  useEffect(() => {
+    try {
+      const savedPhrases = window.localStorage.getItem(
+        IGNORED_GRAMMAR_PHRASES_KEY,
+      );
+      const parsedPhrases = savedPhrases ? JSON.parse(savedPhrases) : [];
+      if (
+        !Array.isArray(parsedPhrases) ||
+        parsedPhrases.some((phrase) => typeof phrase !== "string")
+      ) {
+        throw new Error("Invalid ignored grammar phrases");
+      }
+      setIgnoredPhrases(parsedPhrases);
+      setIgnoredPhrasesReady(true);
+    } catch (error) {
+      console.error("Failed to load ignored grammar phrases:", error);
+      setGrammarError(
+        "Не удалось загрузить список фрагментов, исключённых из проверки.",
+      );
+    }
+  }, []);
 
   const createAnchor = () => {
     if (!editor) return;
@@ -217,7 +296,7 @@ export default function TipTapButtons({
   };
 
   const checkGrammar = async () => {
-    if (!editor) return;
+    if (!editor || !ignoredPhrasesReady) return;
 
     let { text, positions } = getEditorTextWithPositions(editor);
     const { from, to } = editor.state.selection;
@@ -252,6 +331,16 @@ export default function TipTapButtons({
       return;
     }
 
+    const textToCheck = maskIgnoredPhrases(text, ignoredPhrases);
+    if (!textToCheck.trim()) {
+      setGrammarMatches([]);
+      setGrammarError(
+        "Весь текст исключён из проверки. Восстановите нужные фрагменты в списке ниже.",
+      );
+      setGrammarDialogOpen(true);
+      return;
+    }
+
     setGrammarDialogOpen(true);
     setGrammarChecking(true);
     setGrammarError("");
@@ -261,7 +350,7 @@ export default function TipTapButtons({
       const response = await fetch("/api/grammar-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: textToCheck }),
       });
       const data = await response.json();
 
@@ -269,11 +358,67 @@ export default function TipTapButtons({
         throw new Error(data.error || "Не удалось проверить текст.");
       }
 
-      setGrammarMatches(mapGrammarMatches(data.matches || [], positions));
+      setGrammarMatches(
+        mapGrammarMatches(data.matches || [], positions, textToCheck),
+      );
     } catch (error) {
       setGrammarError(error.message || "Не удалось проверить текст.");
     } finally {
       setGrammarChecking(false);
+    }
+  };
+
+  const ignoreGrammarPhrase = (phrase) => {
+    const normalizedPhrase = normalizeGrammarPhrase(phrase);
+    if (!normalizedPhrase) return;
+
+    const alreadyIgnored = ignoredPhrases.some(
+      (ignoredPhrase) =>
+        normalizeGrammarPhrase(ignoredPhrase) === normalizedPhrase,
+    );
+    if (alreadyIgnored) return;
+
+    const nextIgnoredPhrases = [...ignoredPhrases, phrase.trim()];
+    try {
+      window.localStorage.setItem(
+        IGNORED_GRAMMAR_PHRASES_KEY,
+        JSON.stringify(nextIgnoredPhrases),
+      );
+      setIgnoredPhrases(nextIgnoredPhrases);
+      setGrammarMatches((currentMatches) =>
+        currentMatches.filter(
+          (match) =>
+            normalizeGrammarPhrase(match.issueText) !== normalizedPhrase,
+        ),
+      );
+      setGrammarError("");
+    } catch (error) {
+      console.error("Failed to save ignored grammar phrase:", error);
+      setGrammarError(
+        "Не удалось сохранить фрагмент в списке исключений. Проверьте настройки браузера.",
+      );
+    }
+  };
+
+  const restoreGrammarPhrase = (phrase) => {
+    const normalizedPhrase = normalizeGrammarPhrase(phrase);
+    const nextIgnoredPhrases = ignoredPhrases.filter(
+      (ignoredPhrase) =>
+        normalizeGrammarPhrase(ignoredPhrase) !== normalizedPhrase,
+    );
+
+    try {
+      window.localStorage.setItem(
+        IGNORED_GRAMMAR_PHRASES_KEY,
+        JSON.stringify(nextIgnoredPhrases),
+      );
+      setIgnoredPhrases(nextIgnoredPhrases);
+      setGrammarError("");
+    } catch (error) {
+      console.error("Failed to update ignored grammar phrases:", error);
+      setGrammarError(
+        "Не удалось обновить список исключений. Проверьте настройки браузера.",
+      );
     }
   };
 
@@ -556,10 +701,15 @@ export default function TipTapButtons({
           variant="contained"
           color="secondary"
           onClick={checkGrammar}
-          disabled={!editor || grammarChecking}
+          disabled={!editor || !ignoredPhrasesReady || grammarChecking}
         >
           Проверить грамматику
         </Button>
+        {!ignoredPhrasesReady && grammarError ? (
+          <Typography color="error" variant="body2">
+            {grammarError}
+          </Typography>
+        ) : null}
 
         {isThesaurus && termEditorMode ? (
           <Button variant="contained" color="secondary" onClick={onEditSynonyms}>
@@ -728,7 +878,7 @@ export default function TipTapButtons({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>Проверка русского текста</DialogTitle>
+        <DialogTitle>Проверка грамматики</DialogTitle>
         <DialogContent dividers>
           <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
             Текст отправляется на проверку в LanguageTool.
@@ -750,8 +900,50 @@ export default function TipTapButtons({
                   <Typography fontWeight={600}>{match.message}</Typography>
                   {match.context?.text ? (
                     <Typography variant="body2" sx={{ mt: 0.5, color: "text.secondary" }}>
-                      {match.context.text}
+                      {Number.isInteger(match.context.offset) &&
+                      Number.isInteger(match.context.length) &&
+                      match.context.offset >= 0 &&
+                      match.context.length > 0 &&
+                      match.context.offset + match.context.length <=
+                        match.context.text.length ? (
+                        <>
+                          {match.context.text.slice(0, match.context.offset)}
+                          <Box
+                            component="span"
+                            sx={{
+                              color: "error.main",
+                              fontWeight: 700,
+                              textDecoration: "underline wavy",
+                              textDecorationColor: "error.main",
+                              textUnderlineOffset: "3px",
+                            }}
+                          >
+                            {match.context.text
+                              .slice(
+                                match.context.offset,
+                                match.context.offset + match.context.length,
+                              )
+                              .replace(/ /g, "␣")}
+                          </Box>
+                          {match.context.text.slice(
+                            match.context.offset + match.context.length,
+                          )}
+                        </>
+                      ) : (
+                        match.context.text
+                      )}
                     </Typography>
+                  ) : null}
+                  {match.issueText.trim() ? (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      disabled={grammarChecking}
+                      onClick={() => ignoreGrammarPhrase(match.issueText)}
+                      sx={{ mt: 0.5, textTransform: "none" }}
+                    >
+                      Считать «{match.issueText}» правильным и не проверять снова
+                    </Button>
                   ) : null}
                   {match.replacements?.length ? (
                     <List disablePadding sx={{ mt: 0.5 }}>
@@ -763,7 +955,9 @@ export default function TipTapButtons({
                           }
                           onClick={() => applyGrammarSuggestion(match, replacement.value)}
                         >
-                          <ListItemText primary={replacement.value} />
+                          <ListItemText
+                            primary={getReplacementLabel(replacement.value)}
+                          />
                         </ListItemButton>
                       ))}
                     </List>
@@ -776,6 +970,27 @@ export default function TipTapButtons({
               ))}
             </List>
           )}
+          {ignoredPhrases.length > 0 ? (
+            <Box sx={{ mt: 2, pt: 1.5, borderTop: 1, borderColor: "divider" }}>
+              <Typography fontWeight={600}>
+                Исключённые из проверки фрагменты
+              </Typography>
+              <List disablePadding>
+                {ignoredPhrases.map((phrase, index) => (
+                    <ListItemButton
+                      key={`${phrase}-${index}`}
+                      disabled={grammarChecking}
+                      onClick={() => restoreGrammarPhrase(phrase)}
+                    >
+                      <ListItemText
+                        primary={phrase}
+                        secondary="Нажмите, чтобы снова проверять этот фрагмент"
+                      />
+                    </ListItemButton>
+                ))}
+              </List>
+            </Box>
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setGrammarDialogOpen(false)}>Закрыть</Button>
