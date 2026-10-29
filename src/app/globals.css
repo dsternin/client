@@ -62,6 +62,15 @@ body {
   border-radius: 2px;
 }
 
+.grammar-error {
+  background-color: rgba(211, 47, 47, 0.12);
+  border-radius: 2px;
+  text-decoration: underline wavy #d32f2f;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
 .stickyHeaderWrapper {
   position: sticky;
   top: 0;

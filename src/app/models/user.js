@@ -6,6 +6,7 @@ export const UserSchema = new mongoose.Schema({
   password: String,
   lastLoginAt: { type: Date, default: null },
   lastActivityAt: { type: Date, default: null },
+  ignoredGrammarPhrases: { type: [String], default: [] },
   role: {
     type: String,
     enum: ["user", "admin"],

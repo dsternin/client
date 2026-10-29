@@ -10,6 +10,7 @@ import Underline from "@tiptap/extension-underline";
 import { TextBox } from "@/components/Tiptap/extensions/TextBox";
 import CustomHeading from "@/components/Tiptap/extensions/CustomHeading";
 import SearchHighlight from "@/components/Tiptap/extensions/SearchHighlight";
+import GrammarHighlight from "@/components/Tiptap/extensions/GrammarHighlight";
 import Link from "@tiptap/extension-link";
 import AnchorMark from "@/components/Tiptap/extensions/AnchorMark";
 
@@ -32,6 +33,7 @@ export default function getEditorExtensions() {
       types: ["heading", "paragraph"],
     }),
     SearchHighlight,
+    GrammarHighlight,
     Link.configure({
       openOnClick: false,
       autolink: true,

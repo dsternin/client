@@ -12,11 +12,15 @@ import {
   ListItemButton,
   ListItemText,
   CircularProgress,
+  LinearProgress,
+  Paper,
+  Popper,
+  Popover,
   Typography,
 } from "@mui/material";
 import TextBoxControls from "../extensions/TextBoxControl";
 import { rainbowColors } from "@/lib/colors";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ChapterLinkDialog from "@/components/ChapterLinkDialog";
 import { generateHTML } from "@tiptap/html";
 import getEditorExtensions from "@/lib/tiptapExtensions";
@@ -27,9 +31,11 @@ import {
   getThesaurusTerms,
   removeThesaurusTerm,
 } from "@/lib/thesaurus";
+import { getGrammarHighlightState } from "@/components/Tiptap/extensions/GrammarHighlight";
 
 const MAX_GRAMMAR_CHECK_LENGTH = 20_000;
-const IGNORED_GRAMMAR_PHRASES_KEY = "ignoredGrammarPhrases";
+const LEGACY_IGNORED_GRAMMAR_PHRASES_KEY = "ignoredGrammarPhrases";
+let nextGrammarMatchId = 0;
 
 function normalizeGrammarPhrase(phrase) {
   return phrase.trim().toLocaleLowerCase("ru-RU");
@@ -56,7 +62,8 @@ function getReplacementLabel(value) {
 function maskIgnoredPhrases(text, ignoredPhrases) {
   let maskedText = text;
 
-  for (const phrase of ignoredPhrases) {
+  const phraseList = Array.isArray(ignoredPhrases) ? ignoredPhrases : [];
+  for (const phrase of phraseList) {
     if (!phrase) continue;
 
     const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -65,8 +72,7 @@ function maskIgnoredPhrases(text, ignoredPhrases) {
         `(^|[^\\p{L}\\p{N}_])(${escapedPhrase})(?=$|[^\\p{L}\\p{N}_])`,
         "giu",
       ),
-      (match, precedingCharacter, phraseMatch) =>
-        `${precedingCharacter}${" ".repeat(phraseMatch.length)}`,
+      (...groups) => `${groups[1]}${" ".repeat(groups[2].length)}`,
     );
   }
 
@@ -105,7 +111,174 @@ function getEditorTextWithPositions(editor) {
   return { text: characters.join(""), positions };
 }
 
-function mapGrammarMatches(matches, positions, text) {
+function splitGrammarText(text) {
+  const chunks = [];
+  let start = 0;
+
+  while (start < text.length) {
+    let end = Math.min(start + MAX_GRAMMAR_CHECK_LENGTH, text.length);
+    if (end < text.length) {
+      const minBoundary = start + MAX_GRAMMAR_CHECK_LENGTH * 0.7;
+      let boundary = -1;
+
+      // Prefer a paragraph break or sentence end so sentences are not split.
+      for (let index = end - 1; index >= minBoundary; index -= 1) {
+        if (text[index] === "\n") {
+          boundary = index;
+          break;
+        }
+        if (/\s/u.test(text[index])) {
+          let previous = index - 1;
+          while (previous > start && /["'»”’)\]]/u.test(text[previous])) {
+            previous -= 1;
+          }
+          if (/[.!?…]/u.test(text[previous] || "")) {
+            boundary = index;
+            break;
+          }
+        }
+      }
+
+      if (boundary < 0) {
+        boundary = Math.max(
+          text.lastIndexOf("\n", end - 1),
+          text.lastIndexOf(" ", end - 1),
+        );
+      }
+
+      if (boundary >= minBoundary) {
+        end = boundary + 1;
+      }
+
+      const lastCharacter = text.charCodeAt(end - 1);
+      if (lastCharacter >= 0xd800 && lastCharacter <= 0xdbff) end -= 1;
+    }
+
+    chunks.push({ start, end, text: text.slice(start, end) });
+    start = end;
+  }
+
+  return chunks;
+}
+
+function getPositionRanges(positions) {
+  const ranges = [];
+  let start = null;
+  let end = null;
+
+  for (const position of positions) {
+    if (!Number.isInteger(position)) {
+      if (start !== null) ranges.push({ from: start, to: end });
+      start = null;
+      end = null;
+      continue;
+    }
+
+    if (start === null) {
+      start = position;
+      end = position + 1;
+    } else if (position === end) {
+      end += 1;
+    } else {
+      ranges.push({ from: start, to: end });
+      start = position;
+      end = position + 1;
+    }
+  }
+
+  if (start !== null) ranges.push({ from: start, to: end });
+  return ranges;
+}
+
+function isRangeChecked(positions, checkedRanges) {
+  const textPositions = positions.filter(Number.isInteger);
+  return (
+    textPositions.length > 0 &&
+    textPositions.every((position) =>
+      checkedRanges.some(
+        (range) => position >= range.from && position < range.to,
+      ),
+    )
+  );
+}
+
+function findPhraseRanges(text, positions, phrase) {
+  const ranges = [];
+  const normalizedText = text.toLocaleLowerCase("ru-RU");
+  const normalizedPhrase = phrase.toLocaleLowerCase("ru-RU");
+  if (!normalizedPhrase) return ranges;
+  const isWordCharacter = (character) =>
+    Boolean(character && /[\p{L}\p{N}_]/u.test(character));
+  const phraseStartsWithWord = isWordCharacter(normalizedPhrase[0]);
+  const phraseEndsWithWord = isWordCharacter(
+    normalizedPhrase[normalizedPhrase.length - 1],
+  );
+
+  let offset = 0;
+  while (offset < normalizedText.length) {
+    const index = normalizedText.indexOf(normalizedPhrase, offset);
+    if (index < 0) break;
+    const phraseEnd = index + normalizedPhrase.length;
+    const hasWordBoundary =
+      (!phraseStartsWithWord ||
+        !isWordCharacter(normalizedText[index - 1])) &&
+      (!phraseEndsWithWord ||
+        !isWordCharacter(normalizedText[phraseEnd]));
+
+    const phrasePositions = positions.slice(index, index + phrase.length);
+    if (
+      hasWordBoundary &&
+      phrasePositions.length === phrase.length &&
+      phrasePositions.every(
+        (position, positionIndex) =>
+          Number.isInteger(position) &&
+          position === phrasePositions[0] + positionIndex,
+      )
+    ) {
+      ranges.push({
+        from: phrasePositions[0],
+        to: phrasePositions[0] + phrasePositions.length,
+      });
+    }
+
+    offset = phraseEnd;
+  }
+
+  return ranges;
+}
+
+function overlapsAnyRange(match, ranges) {
+  return ranges.some(
+    (range) => match.from < range.to && match.to > range.from,
+  );
+}
+
+function containsIgnoredPhrase(text, ignoredPhrases) {
+  if (!text) return false;
+  const positions = Array.from({ length: text.length }, (_, index) => index);
+  return ignoredPhrases.some(
+    (phrase) => findPhraseRanges(text, positions, phrase).length > 0,
+  );
+}
+
+function isIgnoredGrammarMatch(match, ignoredRanges, ignoredPhrases, doc) {
+  const documentText =
+    Number.isInteger(match.from) &&
+    Number.isInteger(match.to) &&
+    match.from >= 0 &&
+    match.to > match.from &&
+    match.to <= doc.content.size
+      ? doc.textBetween(match.from, match.to, "\n", "\n")
+      : "";
+
+  return (
+    overlapsAnyRange(match, ignoredRanges) ||
+    containsIgnoredPhrase(match.issueText, ignoredPhrases) ||
+    containsIgnoredPhrase(documentText, ignoredPhrases)
+  );
+}
+
+function mapGrammarMatches(matches, positions, text, baseOffset = 0) {
   return matches.map((match) => {
     const { offset, length } = match;
     let from = null;
@@ -134,6 +307,8 @@ function mapGrammarMatches(matches, positions, text) {
 
     return {
       ...match,
+      id: ++nextGrammarMatchId,
+      offset: baseOffset + offset,
       from,
       to,
       issueText:
@@ -182,6 +357,160 @@ function AnchorLinkDialog({ open, anchors, loading, onClose, onInsert }) {
   );
 }
 
+function GrammarCheckPopovers({
+  grammarAnchorEl,
+  activeGrammarMatch,
+  ignoredAnchorEl,
+  ignoredPhrases,
+  grammarChecking,
+  grammarProgress,
+  grammarStatus,
+  onCloseGrammar,
+  onCloseIgnored,
+  onApplySuggestion,
+  onIgnorePhrase,
+  onRestorePhrase,
+}) {
+  const grammarPopupRef = useRef(null);
+  const grammarPopoverOpen = Boolean(grammarAnchorEl && activeGrammarMatch);
+
+  useEffect(() => {
+    if (!grammarPopoverOpen) return;
+
+    const handlePointerDown = (event) => {
+      if (
+        grammarPopupRef.current?.contains(event.target) ||
+        grammarAnchorEl?.contains(event.target)
+      ) {
+        return;
+      }
+      onCloseGrammar();
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onCloseGrammar();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [grammarPopoverOpen, grammarAnchorEl, onCloseGrammar]);
+
+  return (
+    <>
+      <Popper
+        open={grammarPopoverOpen}
+        anchorEl={grammarAnchorEl}
+        placement="bottom-start"
+        modifiers={[
+          { name: "flip", enabled: true },
+          { name: "preventOverflow", options: { padding: 8 } },
+        ]}
+        sx={{ zIndex: (theme) => theme.zIndex.modal + 1 }}
+      >
+        {activeGrammarMatch ? (
+          <Paper
+            ref={grammarPopupRef}
+            elevation={6}
+            sx={{ p: 2, maxWidth: 360, maxHeight: 320, overflowY: "auto" }}
+          >
+            <Typography fontWeight={600}>{activeGrammarMatch.message}</Typography>
+            {activeGrammarMatch.replacements?.length ? (
+              <List disablePadding sx={{ mt: 1 }}>
+                {activeGrammarMatch.replacements.map((replacement, index) => (
+                  <ListItemButton
+                    key={`${replacement.value}-${index}`}
+                    disabled={grammarChecking}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => onApplySuggestion(activeGrammarMatch, replacement.value)}
+                  >
+                    <ListItemText primary={getReplacementLabel(replacement.value)} />
+                  </ListItemButton>
+                ))}
+              </List>
+            ) : (
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Вариант исправления не предложен.
+              </Typography>
+            )}
+            {activeGrammarMatch.issueText.trim() ? (
+              <Button
+                size="small"
+                color="inherit"
+                disabled={grammarChecking}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onIgnorePhrase(activeGrammarMatch.issueText)}
+                sx={{ mt: 1, textTransform: "none" }}
+              >
+                Считать «{activeGrammarMatch.issueText}» правильным
+              </Button>
+            ) : null}
+          </Paper>
+        ) : null}
+      </Popper>
+
+      <Popover
+        open={Boolean(ignoredAnchorEl)}
+        anchorEl={ignoredAnchorEl}
+        onClose={onCloseIgnored}
+        disableAutoFocus
+        disableEnforceFocus
+        disableRestoreFocus
+        disableScrollLock
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <Box sx={{ p: 1, maxWidth: 360 }}>
+          <Typography fontWeight={600} sx={{ px: 1, pt: 1 }}>
+            Исключённые фрагменты
+          </Typography>
+          <List disablePadding>
+            {ignoredPhrases.map((phrase, index) => (
+              <ListItemButton
+                key={`${phrase}-${index}`}
+                disabled={grammarChecking}
+                onClick={() => onRestorePhrase(phrase)}
+              >
+                <ListItemText
+                  primary={phrase}
+                  secondary="Нажмите, чтобы снова проверять этот фрагмент"
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        </Box>
+      </Popover>
+      <GrammarProgressDialog
+        open={grammarChecking}
+        completed={grammarProgress.completed}
+        total={grammarProgress.total}
+        status={grammarStatus}
+      />
+    </>
+  );
+}
+
+function GrammarProgressDialog({ open, completed, total, status }) {
+  const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return (
+    <Dialog open={open} disableEscapeKeyDown fullWidth maxWidth="xs">
+      <DialogTitle>Проверка грамматики</DialogTitle>
+      <DialogContent>
+        <Typography sx={{ mb: 2 }}>
+          {status || `Проверено фрагментов: ${completed} из ${total}`}
+        </Typography>
+        <LinearProgress variant="determinate" value={percentage} />
+        <LinearProgress sx={{ mt: 1 }} />
+        <Typography variant="body2" sx={{ mt: 2, color: "text.secondary" }}>
+          Проверяется текущий фрагмент. Большие тексты обрабатываются последовательно.
+        </Typography>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function TipTapButtons({
   editor,
   save,
@@ -204,10 +533,16 @@ export default function TipTapButtons({
   const [termsToDelete, setTermsToDelete] = useState([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [pendingDeleteTerm, setPendingDeleteTerm] = useState("");
-  const [grammarDialogOpen, setGrammarDialogOpen] = useState(false);
   const [grammarChecking, setGrammarChecking] = useState(false);
-  const [grammarError, setGrammarError] = useState("");
+  const [grammarProgress, setGrammarProgress] = useState({
+    completed: 0,
+    total: 0,
+  });
+  const [grammarStatus, setGrammarStatus] = useState("");
   const [grammarMatches, setGrammarMatches] = useState([]);
+  const [activeGrammarMatch, setActiveGrammarMatch] = useState(null);
+  const [grammarAnchorEl, setGrammarAnchorEl] = useState(null);
+  const [ignoredAnchorEl, setIgnoredAnchorEl] = useState(null);
   const [ignoredPhrases, setIgnoredPhrases] = useState([]);
   const [ignoredPhrasesReady, setIgnoredPhrasesReady] = useState(false);
 
@@ -215,26 +550,119 @@ export default function TipTapButtons({
   const showThesaurusTermActions = isThesaurus && !termEditorMode;
 
   useEffect(() => {
-    try {
-      const savedPhrases = window.localStorage.getItem(
-        IGNORED_GRAMMAR_PHRASES_KEY,
-      );
-      const parsedPhrases = savedPhrases ? JSON.parse(savedPhrases) : [];
-      if (
-        !Array.isArray(parsedPhrases) ||
-        parsedPhrases.some((phrase) => typeof phrase !== "string")
-      ) {
-        throw new Error("Invalid ignored grammar phrases");
+    let cancelled = false;
+
+    const loadIgnoredPhrases = async () => {
+      try {
+        const response = await fetch("/api/grammar-exclusions");
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Не удалось загрузить исключения.");
+        }
+
+        const databasePhrases = Array.isArray(data.ignoredPhrases)
+          ? data.ignoredPhrases.filter((phrase) => typeof phrase === "string")
+          : [];
+        let legacyPhrases = [];
+        try {
+          const legacyValue = window.localStorage.getItem(
+            LEGACY_IGNORED_GRAMMAR_PHRASES_KEY,
+          );
+          const parsed = legacyValue ? JSON.parse(legacyValue) : [];
+          if (Array.isArray(parsed)) {
+            legacyPhrases = parsed.filter(
+              (phrase) => typeof phrase === "string" && phrase.trim(),
+            );
+          }
+        } catch (error) {
+          console.error("Failed to read legacy grammar exclusions:", error);
+        }
+
+        const mergedPhrases = new Map();
+        for (const phrase of [...databasePhrases, ...legacyPhrases]) {
+          const trimmedPhrase = phrase.trim();
+          const key = normalizeGrammarPhrase(trimmedPhrase);
+          if (key && !mergedPhrases.has(key)) {
+            mergedPhrases.set(key, trimmedPhrase);
+          }
+        }
+        const phrases = Array.from(mergedPhrases.values());
+
+        if (legacyPhrases.length > 0) {
+          const saveResponse = await fetch("/api/grammar-exclusions", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ignoredPhrases: phrases }),
+          });
+          const savedData = await saveResponse.json();
+          if (!saveResponse.ok) {
+            throw new Error(savedData.error || "Не удалось перенести исключения в базу.");
+          }
+          window.localStorage.removeItem(LEGACY_IGNORED_GRAMMAR_PHRASES_KEY);
+        }
+
+        if (cancelled) return;
+        setIgnoredPhrases(phrases);
+        setIgnoredPhrasesReady(true);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to load grammar exclusions:", error);
+        setGrammarStatus(error.message || "Не удалось загрузить исключения.");
       }
-      setIgnoredPhrases(parsedPhrases);
-      setIgnoredPhrasesReady(true);
-    } catch (error) {
-      console.error("Failed to load ignored grammar phrases:", error);
-      setGrammarError(
-        "Не удалось загрузить список фрагментов, исключённых из проверки.",
-      );
-    }
+    };
+
+    void loadIgnoredPhrases();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleClick = (event) => {
+      const target = event.target;
+      const issueElement = target?.closest?.("[data-grammar-issue]");
+      if (!issueElement || !editor.view.dom.contains(issueElement)) return;
+
+      const matchIndex = Number(issueElement.dataset.grammarIssue);
+      const match = grammarMatches.find(
+        (grammarMatch) => grammarMatch.id === matchIndex,
+      );
+      if (!match) return;
+
+      setActiveGrammarMatch(match);
+      setGrammarAnchorEl(issueElement);
+    };
+
+    const handleTransaction = ({ transaction }) => {
+      if (!transaction.docChanged) return;
+
+      const nextState = getGrammarHighlightState(editor.state);
+      const nextMatches = nextState?.matches || [];
+      setGrammarMatches(nextMatches);
+      setActiveGrammarMatch((currentMatch) => {
+        if (!currentMatch) return null;
+        const updatedMatch = nextMatches.find(
+          (match) => match.id === currentMatch.id,
+        );
+        if (!updatedMatch) {
+          setGrammarAnchorEl(null);
+          return null;
+        }
+        return updatedMatch;
+      });
+      setGrammarStatus("");
+    };
+
+    editor.view.dom.addEventListener("click", handleClick);
+    editor.on("transaction", handleTransaction);
+
+    return () => {
+      editor.view.dom.removeEventListener("click", handleClick);
+      editor.off("transaction", handleTransaction);
+    };
+  }, [editor, grammarMatches]);
 
   const createAnchor = () => {
     if (!editor) return;
@@ -295,80 +723,189 @@ export default function TipTapButtons({
     save();
   };
 
-  const checkGrammar = async () => {
+  const checkGrammar = async (phrasesToIgnore = ignoredPhrases) => {
     if (!editor || !ignoredPhrasesReady) return;
 
-    let { text, positions } = getEditorTextWithPositions(editor);
-    const { from, to } = editor.state.selection;
-    if (from !== to) {
-      const selectedIndexes = positions.reduce((indexes, position, index) => {
-        if (Number.isInteger(position) && position >= from && position < to) {
-          indexes.push(index);
-        }
-        return indexes;
-      }, []);
+    const ignoredPhraseList = Array.isArray(phrasesToIgnore)
+      ? phrasesToIgnore.filter((phrase) => typeof phrase === "string")
+      : [];
+    if (!Array.isArray(phrasesToIgnore)) {
+      setGrammarStatus("Список винятків пошкоджений. Перевірка продовжиться без нього.");
+    }
 
-      if (selectedIndexes.length) {
-        const start = selectedIndexes[0];
-        const end = selectedIndexes[selectedIndexes.length - 1] + 1;
-        text = text.slice(start, end);
-        positions = positions.slice(start, end);
-      }
+    const { text, positions } = getEditorTextWithPositions(editor);
+    const grammarState = getGrammarHighlightState(editor.state);
+    const ignoredRanges = ignoredPhraseList.flatMap((phrase) =>
+      findPhraseRanges(text, positions, phrase),
+    );
+    let matches = (grammarState?.matches || []).filter(
+      (match) =>
+        !isIgnoredGrammarMatch(
+          match,
+          ignoredRanges,
+          ignoredPhraseList,
+          editor.state.doc,
+        ),
+    );
+    let checkedRanges = [...(grammarState?.checkedRanges || [])];
+    if (matches.length !== (grammarState?.matches || []).length) {
+      editor.commands.setGrammarData({ matches, checkedRanges });
+      setGrammarMatches(matches);
     }
 
     if (!text.trim()) {
+      editor.commands.clearGrammarHighlights();
       setGrammarMatches([]);
-      setGrammarError("В редакторе нет текста для проверки.");
-      setGrammarDialogOpen(true);
-      return;
-    }
-    if (text.length > MAX_GRAMMAR_CHECK_LENGTH) {
-      setGrammarMatches([]);
-      setGrammarError(
-        "Выделите фрагмент или сократите текст в редакторе до 20 000 символов.",
-      );
-      setGrammarDialogOpen(true);
+      setGrammarStatus("В редакторе нет текста для проверки.");
       return;
     }
 
-    const textToCheck = maskIgnoredPhrases(text, ignoredPhrases);
-    if (!textToCheck.trim()) {
-      setGrammarMatches([]);
-      setGrammarError(
-        "Весь текст исключён из проверки. Восстановите нужные фрагменты в списке ниже.",
+    setActiveGrammarMatch(null);
+    setGrammarAnchorEl(null);
+    const checkedDocument = editor.state.doc;
+    const chunks = splitGrammarText(text);
+    const chunksToCheck = chunks.filter(
+      (chunk) =>
+        !isRangeChecked(
+          positions.slice(chunk.start, chunk.end),
+          checkedRanges,
+        ),
+    );
+
+    if (!chunksToCheck.length) {
+      setGrammarMatches(matches);
+      setGrammarStatus(
+        matches.length
+          ? `Найдено ошибок: ${matches.length}. Проверенные фрагменты использованы повторно.`
+          : "Все фрагменты уже проверены. Новых ошибок нет.",
       );
-      setGrammarDialogOpen(true);
       return;
     }
 
-    setGrammarDialogOpen(true);
     setGrammarChecking(true);
-    setGrammarError("");
-    setGrammarMatches([]);
+    setGrammarProgress({ completed: 0, total: chunksToCheck.length });
+    setGrammarStatus(`Проверка фрагментов: 0 из ${chunksToCheck.length}…`);
+    let checkedChunks = 0;
 
     try {
-      const response = await fetch("/api/grammar-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: textToCheck }),
-      });
-      const data = await response.json();
+      for (const chunk of chunksToCheck) {
+        if (editor.state.doc !== checkedDocument) return;
 
-      if (!response.ok) {
-        throw new Error(data.error || "Не удалось проверить текст.");
+        const chunkPositions = positions.slice(chunk.start, chunk.end);
+        const chunkRanges = getPositionRanges(chunkPositions);
+        const matchesOutsideChunk = () =>
+          matches.filter(
+            (match) =>
+              !chunkRanges.some(
+                (range) => match.from < range.to && match.to > range.from,
+              ),
+          );
+        const textToCheck = maskIgnoredPhrases(chunk.text, ignoredPhraseList);
+        if (!textToCheck.trim()) {
+          matches = matchesOutsideChunk();
+          checkedRanges = [...checkedRanges, ...chunkRanges];
+          editor.commands.setGrammarData({ matches, checkedRanges });
+          setGrammarMatches(matches);
+          checkedChunks += 1;
+          setGrammarProgress({
+            completed: checkedChunks,
+            total: chunksToCheck.length,
+          });
+          setGrammarStatus(
+            `Проверка фрагментов: ${checkedChunks} из ${chunksToCheck.length}…`,
+          );
+          continue;
+        }
+
+        setGrammarStatus(
+          `Проверка фрагментов: ${checkedChunks + 1} из ${chunksToCheck.length}…`,
+        );
+        const response = await fetch("/api/grammar-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: textToCheck }),
+        });
+        const data = await response.json();
+
+        if (editor.state.doc !== checkedDocument) return;
+
+        if (!response.ok) {
+          throw new Error(data.error || "Не удалось проверить текст.");
+        }
+
+        matches = matchesOutsideChunk();
+        matches.push(
+          ...mapGrammarMatches(
+            Array.isArray(data.matches) ? data.matches : [],
+            positions.slice(chunk.start, chunk.end),
+            chunk.text,
+            chunk.start,
+          ).filter(
+            (match) =>
+              Number.isInteger(match.from) &&
+              Number.isInteger(match.to) &&
+              !isIgnoredGrammarMatch(
+                match,
+                ignoredRanges,
+                ignoredPhraseList,
+                checkedDocument,
+              ),
+          ),
+        );
+        checkedRanges = [...checkedRanges, ...chunkRanges];
+        editor.commands.setGrammarData({ matches, checkedRanges });
+        setGrammarMatches(matches);
+        checkedChunks += 1;
+        setGrammarProgress({
+          completed: checkedChunks,
+          total: chunksToCheck.length,
+        });
       }
 
-      setGrammarMatches(
-        mapGrammarMatches(data.matches || [], positions, textToCheck),
+      setGrammarStatus(
+        matches.length
+          ? `Найдено ошибок: ${matches.length}. Нажмите на подчёркнутый фрагмент, чтобы увидеть варианты.`
+          : ignoredPhraseList.length
+            ? "Ошибок не найдено. Исключённые фрагменты пропущены."
+            : "Ошибок не найдено.",
       );
     } catch (error) {
-      setGrammarError(error.message || "Не удалось проверить текст.");
+      if (editor.state.doc !== checkedDocument) return;
+
+      setGrammarMatches(matches);
+      editor.commands.setGrammarData({ matches, checkedRanges });
+      setGrammarStatus(
+        `${error.message || "Не удалось проверить текст."}${
+          checkedChunks
+            ? ` Проверено фрагментов: ${checkedChunks} из ${chunksToCheck.length}.`
+            : ""
+        }`,
+      );
     } finally {
       setGrammarChecking(false);
     }
   };
 
-  const ignoreGrammarPhrase = (phrase) => {
+  const saveIgnoredPhrases = async (phrases) => {
+    const response = await fetch("/api/grammar-exclusions", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ignoredPhrases: phrases }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Не удалось сохранить исключения.");
+    }
+
+    if (!Array.isArray(data.ignoredPhrases)) {
+      throw new Error("Сервер вернул некорректный список исключений.");
+    }
+
+    return data.ignoredPhrases;
+  };
+
+  const ignoreGrammarPhrase = async (phrase) => {
     const normalizedPhrase = normalizeGrammarPhrase(phrase);
     if (!normalizedPhrase) return;
 
@@ -376,31 +913,45 @@ export default function TipTapButtons({
       (ignoredPhrase) =>
         normalizeGrammarPhrase(ignoredPhrase) === normalizedPhrase,
     );
-    if (alreadyIgnored) return;
-
-    const nextIgnoredPhrases = [...ignoredPhrases, phrase.trim()];
+    const nextIgnoredPhrases = alreadyIgnored
+      ? ignoredPhrases
+      : [...ignoredPhrases, phrase.trim()];
     try {
-      window.localStorage.setItem(
-        IGNORED_GRAMMAR_PHRASES_KEY,
-        JSON.stringify(nextIgnoredPhrases),
+      if (!alreadyIgnored) {
+        const savedPhrases = await saveIgnoredPhrases(nextIgnoredPhrases);
+        setIgnoredPhrases(savedPhrases);
+      }
+      setIgnoredAnchorEl(null);
+      setActiveGrammarMatch(null);
+      setGrammarAnchorEl(null);
+      const currentGrammarState = getGrammarHighlightState(editor.state);
+      const { text, positions } = getEditorTextWithPositions(editor);
+      const ignoredRanges = findPhraseRanges(
+        text,
+        positions,
+        phrase.trim(),
       );
-      setIgnoredPhrases(nextIgnoredPhrases);
-      setGrammarMatches((currentMatches) =>
-        currentMatches.filter(
-          (match) =>
-            normalizeGrammarPhrase(match.issueText) !== normalizedPhrase,
-        ),
+      const remainingMatches = (currentGrammarState?.matches || []).filter(
+        (match) =>
+          !isIgnoredGrammarMatch(
+            match,
+            ignoredRanges,
+            [phrase.trim()],
+            editor.state.doc,
+          ),
       );
-      setGrammarError("");
+      editor.commands.setGrammarData({
+        matches: remainingMatches,
+        checkedRanges: currentGrammarState?.checkedRanges || [],
+      });
+      setGrammarMatches(remainingMatches);
     } catch (error) {
       console.error("Failed to save ignored grammar phrase:", error);
-      setGrammarError(
-        "Не удалось сохранить фрагмент в списке исключений. Проверьте настройки браузера.",
-      );
+      setGrammarStatus(error.message || "Не удалось сохранить исключение.");
     }
   };
 
-  const restoreGrammarPhrase = (phrase) => {
+  const restoreGrammarPhrase = async (phrase) => {
     const normalizedPhrase = normalizeGrammarPhrase(phrase);
     const nextIgnoredPhrases = ignoredPhrases.filter(
       (ignoredPhrase) =>
@@ -408,30 +959,30 @@ export default function TipTapButtons({
     );
 
     try {
-      window.localStorage.setItem(
-        IGNORED_GRAMMAR_PHRASES_KEY,
-        JSON.stringify(nextIgnoredPhrases),
-      );
-      setIgnoredPhrases(nextIgnoredPhrases);
-      setGrammarError("");
+      const savedPhrases = await saveIgnoredPhrases(nextIgnoredPhrases);
+      setIgnoredPhrases(savedPhrases);
+      setIgnoredAnchorEl(null);
+      const { text, positions } = getEditorTextWithPositions(editor);
+      const phraseRanges = findPhraseRanges(text, positions, phrase);
+      editor.commands.invalidateGrammarRanges(phraseRanges);
+      const invalidatedState = getGrammarHighlightState(editor.state);
+      setGrammarMatches(invalidatedState?.matches || []);
     } catch (error) {
       console.error("Failed to update ignored grammar phrases:", error);
-      setGrammarError(
-        "Не удалось обновить список исключений. Проверьте настройки браузера.",
-      );
+      setGrammarStatus(error.message || "Не удалось обновить исключения.");
     }
   };
 
   const applyGrammarSuggestion = (match, replacement) => {
     if (!editor || match.from === null || match.to === null) return;
 
+    setActiveGrammarMatch(null);
+    setGrammarAnchorEl(null);
     editor
       .chain()
       .focus()
       .insertContentAt({ from: match.from, to: match.to }, replacement)
       .run();
-
-    void checkGrammar();
   };
 
   const handleExportToPDF = async () => {
@@ -608,6 +1159,24 @@ export default function TipTapButtons({
             backdropFilter: "blur(4px)",
           }}
         >
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => checkGrammar()}
+            disabled={!editor || !ignoredPhrasesReady || grammarChecking}
+          >
+            {grammarChecking ? "Проверка грамматики…" : "Проверить грамматику"}
+          </Button>
+
+          {ignoredPhrases.length > 0 ? (
+            <Button
+              variant="outlined"
+              onClick={(event) => setIgnoredAnchorEl(event.currentTarget)}
+            >
+              Исключения: {ignoredPhrases.length}
+            </Button>
+          ) : null}
+
           <Button color="secondary" variant="contained" onClick={onAddTerm}>
             Добавить термин
           </Button>
@@ -679,6 +1248,24 @@ export default function TipTapButtons({
             </Button>
           </DialogActions>
         </Dialog>
+
+        <GrammarCheckPopovers
+          grammarAnchorEl={grammarAnchorEl}
+          activeGrammarMatch={activeGrammarMatch}
+          ignoredAnchorEl={ignoredAnchorEl}
+          ignoredPhrases={ignoredPhrases}
+          grammarChecking={grammarChecking}
+          grammarProgress={grammarProgress}
+          grammarStatus={grammarStatus}
+          onCloseGrammar={() => {
+            setGrammarAnchorEl(null);
+            setActiveGrammarMatch(null);
+          }}
+          onCloseIgnored={() => setIgnoredAnchorEl(null)}
+          onApplySuggestion={applyGrammarSuggestion}
+          onIgnorePhrase={ignoreGrammarPhrase}
+          onRestorePhrase={restoreGrammarPhrase}
+        />
       </>
     );
   }
@@ -700,17 +1287,26 @@ export default function TipTapButtons({
         <Button
           variant="contained"
           color="secondary"
-          onClick={checkGrammar}
+          onClick={() => checkGrammar()}
           disabled={!editor || !ignoredPhrasesReady || grammarChecking}
         >
-          Проверить грамматику
+          {grammarChecking ? (
+            <>
+              <CircularProgress size={18} color="inherit" sx={{ mr: 1 }} />
+              Проверка грамматики…
+            </>
+          ) : (
+            "Проверить грамматику"
+          )}
         </Button>
-        {!ignoredPhrasesReady && grammarError ? (
-          <Typography color="error" variant="body2">
-            {grammarError}
-          </Typography>
+        {ignoredPhrases.length > 0 ? (
+          <Button
+            variant="outlined"
+            onClick={(event) => setIgnoredAnchorEl(event.currentTarget)}
+          >
+            Исключения: {ignoredPhrases.length}
+          </Button>
         ) : null}
-
         {isThesaurus && termEditorMode ? (
           <Button variant="contained" color="secondary" onClick={onEditSynonyms}>
             Редактировать синонимы
@@ -872,130 +1468,23 @@ export default function TipTapButtons({
         onSelect={insertTermLink}
       />
 
-      <Dialog
-        open={grammarDialogOpen}
-        onClose={() => setGrammarDialogOpen(false)}
-        fullWidth
-        maxWidth="md"
-      >
-        <DialogTitle>Проверка грамматики</DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
-            Текст отправляется на проверку в LanguageTool.
-          </Typography>
-          {grammarChecking ? (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <CircularProgress size={20} />
-              <Typography>Проверяем текст…</Typography>
-            </Box>
-          ) : grammarError ? (
-            <Typography color="error">{grammarError}</Typography>
-          ) : grammarMatches.length === 0 ? (
-            <Typography>LanguageTool не нашёл ошибок.</Typography>
-          ) : (
-            <List disablePadding>
-              {grammarMatches.map((match, index) => (
-                <Box key={`${match.offset}-${match.length}-${index}`}>
-                  {index > 0 ? <Box sx={{ borderTop: 1, borderColor: "divider", my: 1.5 }} /> : null}
-                  <Typography fontWeight={600}>{match.message}</Typography>
-                  {match.context?.text ? (
-                    <Typography variant="body2" sx={{ mt: 0.5, color: "text.secondary" }}>
-                      {Number.isInteger(match.context.offset) &&
-                      Number.isInteger(match.context.length) &&
-                      match.context.offset >= 0 &&
-                      match.context.length > 0 &&
-                      match.context.offset + match.context.length <=
-                        match.context.text.length ? (
-                        <>
-                          {match.context.text.slice(0, match.context.offset)}
-                          <Box
-                            component="span"
-                            sx={{
-                              color: "error.main",
-                              fontWeight: 700,
-                              textDecoration: "underline wavy",
-                              textDecorationColor: "error.main",
-                              textUnderlineOffset: "3px",
-                            }}
-                          >
-                            {match.context.text
-                              .slice(
-                                match.context.offset,
-                                match.context.offset + match.context.length,
-                              )
-                              .replace(/ /g, "␣")}
-                          </Box>
-                          {match.context.text.slice(
-                            match.context.offset + match.context.length,
-                          )}
-                        </>
-                      ) : (
-                        match.context.text
-                      )}
-                    </Typography>
-                  ) : null}
-                  {match.issueText.trim() ? (
-                    <Button
-                      size="small"
-                      color="inherit"
-                      disabled={grammarChecking}
-                      onClick={() => ignoreGrammarPhrase(match.issueText)}
-                      sx={{ mt: 0.5, textTransform: "none" }}
-                    >
-                      Считать «{match.issueText}» правильным и не проверять снова
-                    </Button>
-                  ) : null}
-                  {match.replacements?.length ? (
-                    <List disablePadding sx={{ mt: 0.5 }}>
-                      {match.replacements.map((replacement, replacementIndex) => (
-                        <ListItemButton
-                          key={`${replacement.value}-${replacementIndex}`}
-                          disabled={
-                            grammarChecking || match.from === null || match.to === null
-                          }
-                          onClick={() => applyGrammarSuggestion(match, replacement.value)}
-                        >
-                          <ListItemText
-                            primary={getReplacementLabel(replacement.value)}
-                          />
-                        </ListItemButton>
-                      ))}
-                    </List>
-                  ) : (
-                    <Typography variant="body2" sx={{ mt: 0.5 }}>
-                      Вариант исправления не предложен.
-                    </Typography>
-                  )}
-                </Box>
-              ))}
-            </List>
-          )}
-          {ignoredPhrases.length > 0 ? (
-            <Box sx={{ mt: 2, pt: 1.5, borderTop: 1, borderColor: "divider" }}>
-              <Typography fontWeight={600}>
-                Исключённые из проверки фрагменты
-              </Typography>
-              <List disablePadding>
-                {ignoredPhrases.map((phrase, index) => (
-                    <ListItemButton
-                      key={`${phrase}-${index}`}
-                      disabled={grammarChecking}
-                      onClick={() => restoreGrammarPhrase(phrase)}
-                    >
-                      <ListItemText
-                        primary={phrase}
-                        secondary="Нажмите, чтобы снова проверять этот фрагмент"
-                      />
-                    </ListItemButton>
-                ))}
-              </List>
-            </Box>
-          ) : null}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setGrammarDialogOpen(false)}>Закрыть</Button>
-        </DialogActions>
-      </Dialog>
+      <GrammarCheckPopovers
+        grammarAnchorEl={grammarAnchorEl}
+        activeGrammarMatch={activeGrammarMatch}
+        ignoredAnchorEl={ignoredAnchorEl}
+        ignoredPhrases={ignoredPhrases}
+        grammarChecking={grammarChecking}
+        grammarProgress={grammarProgress}
+        grammarStatus={grammarStatus}
+        onCloseGrammar={() => {
+          setGrammarAnchorEl(null);
+          setActiveGrammarMatch(null);
+        }}
+        onCloseIgnored={() => setIgnoredAnchorEl(null)}
+        onApplySuggestion={applyGrammarSuggestion}
+        onIgnorePhrase={ignoreGrammarPhrase}
+        onRestorePhrase={restoreGrammarPhrase}
+      />
 
     </>
   );
