@@ -4,6 +4,7 @@ import {
   NodeViewContent,
   ReactNodeViewRenderer,
 } from "@tiptap/react";
+import { Dialog, DialogContent } from "@mui/material";
 import { ResizableBox } from "react-resizable";
 import "react-resizable/css/styles.css";
 import { useEffect, useRef, useState } from "react";
@@ -88,6 +89,7 @@ export function CustomImageComponent({ node, updateAttributes, editor }) {
   const readOnly = !editor.isEditable;
   const { src, width = 300, height = 200, alignment = "center" } = node.attrs;
   const [isActive, setIsActive] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const wrapperRef = useRef(null);
 
   useEffect(() => {
@@ -161,11 +163,13 @@ export function CustomImageComponent({ node, updateAttributes, editor }) {
       {readOnly ? (
         <img
           src={src}
+          onClick={() => setIsPreviewOpen(true)}
           style={{
             width: `${width}px`,
             height: `${height}px`,
             objectFit: "contain",
             display: "block",
+            cursor: "zoom-in",
           }}
           contentEditable={false}
         />
@@ -195,6 +199,47 @@ export function CustomImageComponent({ node, updateAttributes, editor }) {
         </ResizableBox>
       )}
       <NodeViewContent />
+      {readOnly ? (
+        <Dialog
+          open={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          maxWidth={false}
+          slotProps={{
+            paper: {
+              sx: {
+                maxWidth: "calc(100vw - 48px)",
+                maxHeight: "calc(100dvh - 48px)",
+                overflow: "hidden",
+                backgroundColor: "transparent",
+                boxShadow: "none",
+              },
+            },
+          }}
+        >
+          <DialogContent
+            sx={{
+              p: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+            }}
+          >
+            <img
+              src={src}
+              alt={node.attrs.alt || ""}
+              style={{
+                display: "block",
+                maxWidth: "calc(100vw - 48px)",
+                maxHeight: "calc(100dvh - 48px)",
+                width: "auto",
+                height: "auto",
+                objectFit: "contain",
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </NodeViewWrapper>
   );
 }

@@ -7,7 +7,6 @@ import GrammarExclusions from "@/app/models/grammarExclusions";
 import dbConnect from "@/lib/db";
 
 const User = mongoose.models.User || mongoose.model("User", UserSchema);
-const MAX_EXCLUSIONS = 1_000;
 const MAX_PHRASE_LENGTH = 500;
 const GLOBAL_EXCLUSIONS_ID = "global";
 
@@ -30,7 +29,6 @@ async function getAuthenticatedUserId() {
 function normalizePhrases(phrases) {
   if (
     !Array.isArray(phrases) ||
-    phrases.length > MAX_EXCLUSIONS ||
     phrases.some(
       (phrase) =>
         typeof phrase !== "string" ||
