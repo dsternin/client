@@ -33,4 +33,13 @@ async function dbConnect() {
   return cached.conn;
 }
 
+export async function getContentVersion() {
+  const connection = await dbConnect();
+  const state = await connection.connection.db.collection("backup_state").findOne(
+    { _id: "content-version" },
+    { projection: { version: 1 } },
+  );
+  return state?.version || null;
+}
+
 export default dbConnect;

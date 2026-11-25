@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
+import { progressResponse } from "@/lib/progressResponse";
 import { BookSchema, clearChapterCache, ensureThesaurusBook } from "../books/route";
 import {
   loadChapter,
@@ -191,7 +192,8 @@ function getPageContext(chapters, blockIndex) {
   return { section, point };
 }
 
-async function updateBookPage(bookName, page, pageSize, pageContent) {
+async function updateBookPage(bookName, page, pageSize, pageContent, onProgress) {
+  onProgress?.("Подготовка книги", 0.05);
   const bookDoc = await Book.findOne({ name: bookName });
   if (!bookDoc) {
     throw new Error("Book not found");
@@ -200,12 +202,16 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
   if (bookName === THESAURUS_BOOK_NAME) {
     const document = createDocument(pageContent || []);
 
+    onProgress?.("Сохранение тезауруса", 0.2);
     await saveChapter(
       bookName,
       THESAURUS_DEFAULT_SECTION,
       JSON.stringify(document),
+      onProgress ? (fraction) => onProgress("Сохранение тезауруса", 0.2 + fraction * 0.55) : undefined,
     );
+    onProgress?.("Обновление якорей", 0.8);
     await syncChapterAnchors(bookName, THESAURUS_DEFAULT_SECTION, document);
+    onProgress?.("Обновление структуры книги", 0.9);
     await Book.findOneAndUpdate(
       { name: bookName },
       { chapters: [THESAURUS_DEFAULT_SECTION] },
@@ -218,21 +224,33 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
   if (pageSize === -1) {
     const updatedSections = [];
     let currentChapter = null;
+    const totalChapters = pageContent.length
+      ? pageContent.filter((block) => block.type === "heading" && block.attrs?.level === 1).length +
+        (pageContent[0].type === "heading" && pageContent[0].attrs?.level === 1 ? 0 : 1)
+      : 0;
+    const saveFullChapter = async (chapter) => {
+      const index = updatedSections.length;
+      const report = (stage, fraction) => {
+        onProgress?.(stage, 0.2 + 0.7 * (index + fraction) / totalChapters);
+      };
+      report("Сохранение разделов", 0);
+      const document = createDocument(chapter.content);
+      await saveChapter(
+        bookName,
+        chapter.slug,
+        JSON.stringify(document),
+        onProgress ? (fraction) => report("Сохранение разделов", fraction * 0.8) : undefined,
+      );
+      report("Обновление якорей", 0.85);
+      await syncChapterAnchors(bookName, chapter.slug, document);
+      updatedSections.push(chapter.slug);
+      report("Сохранение разделов", 1);
+    };
 
     for (const block of pageContent) {
       if (block.type === "heading" && block.attrs?.level === 1) {
         if (currentChapter) {
-          await saveChapter(
-            bookName,
-            currentChapter.slug,
-            JSON.stringify(createDocument(currentChapter.content)),
-          );
-          await syncChapterAnchors(
-            bookName,
-            currentChapter.slug,
-            createDocument(currentChapter.content),
-          );
-          updatedSections.push(currentChapter.slug);
+          await saveFullChapter(currentChapter);
         }
 
         const slug = block.content?.[0]?.text || "chapter";
@@ -248,19 +266,10 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
     }
 
     if (currentChapter) {
-      await saveChapter(
-        bookName,
-        currentChapter.slug,
-        JSON.stringify(createDocument(currentChapter.content)),
-      );
-      await syncChapterAnchors(
-        bookName,
-        currentChapter.slug,
-        createDocument(currentChapter.content),
-      );
-      updatedSections.push(currentChapter.slug);
+      await saveFullChapter(currentChapter);
     }
 
+    onProgress?.("Обновление структуры книги", 0.9);
     await Book.findOneAndUpdate(
       { name: bookName },
       { chapters: updatedSections },
@@ -285,7 +294,8 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
   const pendingUpdates = [];
   let expectedPageLen = 0; // total number of blocks we expect to replace across chapters
 
-  for (const section of bookDoc.chapters) {
+  for (const [index, section] of bookDoc.chapters.entries()) {
+    onProgress?.("Чтение разделов книги", 0.05 + 0.15 * index / bookDoc.chapters.length);
     const chapterData = await loadChapter(bookName, section);
     // Normalize chapterData shapes (same logic as readBookChapters)
     let doc = null;
@@ -364,17 +374,24 @@ async function updateBookPage(bookName, page, pageSize, pageContent) {
   }
 
   // Persist updates
-  for (const u of pendingUpdates) {
+  for (const [index, u] of pendingUpdates.entries()) {
+    const report = (stage, fraction) => {
+      onProgress?.(stage, 0.2 + 0.7 * (index + fraction) / pendingUpdates.length);
+    };
+    report("Сохранение разделов", 0);
     await saveChapter(
       bookName,
       u.section,
       JSON.stringify(createDocument(u.updatedBlocks || [])),
+      onProgress ? (fraction) => report("Сохранение разделов", fraction * 0.8) : undefined,
     );
+    report("Обновление якорей", 0.85);
     await syncChapterAnchors(
       bookName,
       u.section,
       createDocument(u.updatedBlocks || []),
     );
+    report("Сохранение разделов", 1);
   }
 
   return updatedSections;
@@ -527,16 +544,22 @@ export async function POST(req) {
         ? -1
         : (pageSize === -1 ? -1 : Math.max(1, parseInteger(pageSize, DEFAULT_PAGE_SIZE)));
 
-    const updatedSections = await updateBookPage(
-      book,
-      page,
-      normalizedPageSize,
-      normalizedContent,
-    );
-
-    clearChapterCache(book);
-
-    return NextResponse.json({ ok: true, updatedSections });
+    const save = async (onProgress) => {
+      const updatedSections = await updateBookPage(
+        book,
+        page,
+        normalizedPageSize,
+        normalizedContent,
+        onProgress,
+      );
+      onProgress?.("Завершение сохранения", 0.93);
+      clearChapterCache(book);
+      return { ok: true, updatedSections };
+    };
+    if (req.headers.get("accept")?.includes("application/x-ndjson")) {
+      return progressResponse(save, "Ошибка при сохранении страницы");
+    }
+    return NextResponse.json(await save());
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

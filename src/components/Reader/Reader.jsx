@@ -12,6 +12,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  LinearProgress,
   List,
   ListItemButton,
   ListItemText,
@@ -20,6 +21,7 @@ import {
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { useBookContext } from "@/store/BookContext";
+import { readProgressResponse } from "@/lib/readProgressResponse";
 import TipTapButtons from "../Tiptap/TipTapButtons";
 import MenuButton from "../MenuButtons";
 import ThesaurusToc from "../ThesaurusToc";
@@ -191,6 +193,9 @@ export default function Reader() {
   const [isReadyToScroll, setIsReadyToScroll] = useState(false);
   const [loadingBook, setLoadingBook] = useState(false);
   const [loadingPage, setLoadingPage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState({ stage: "Подготовка", percent: null });
+  const savingRef = useRef(false);
   const [pageError, setPageError] = useState(null);
   const [thesaurusTermQuery, setThesaurusTermQuery] = useState("");
   const [selectedThesaurusTerm, setSelectedThesaurusTerm] = useState("");
@@ -233,19 +238,19 @@ export default function Reader() {
   }
 
   async function loadPageDocument(page, pageSize) {
-    if (!book) return;
+    if (!book) return false;
     const requestId = ++pageRequestIdRef.current;
     setLoadingPage(true);
     setPageError(null);
 
     try {
       const payload = await fetchPage(book, page, pageSize);
-      if (requestId !== pageRequestIdRef.current) return;
+      if (requestId !== pageRequestIdRef.current) return false;
       if (!payload) {
         setPageDoc(null);
         setPageContext({ section: "", point: "" });
         setLoadedPage(null);
-        return;
+        return false;
       }
 
       const content = addIdsToHeadings(payload.pageContent?.content || []);
@@ -255,9 +260,11 @@ export default function Reader() {
       setTotalPages(payload.totalPages || totalPages);
       setTotalBlocks(payload.totalBlocks || totalBlocks);
       setBookLabel(payload.label);
+      return true;
     } catch (error) {
       console.error(error);
       setPageError("Ошибка загрузки страницы");
+      return false;
     } finally {
       if (requestId === pageRequestIdRef.current) {
         setLoadingPage(false);
@@ -651,7 +658,10 @@ export default function Reader() {
   }
 
   async function save() {
-    if (!editor || !book || !pageDoc) return;
+    if (!editor || !book || !pageDoc) {
+      alert("Не удалось сохранить: данные редактора не загружены");
+      return false;
+    }
     setIsReadyToScroll(false);
 
     let editedPageContent = editor.getJSON().content;
@@ -687,32 +697,58 @@ export default function Reader() {
 
     const savePageSize = isThesaurus ? -1 : pageBlockSize;
 
-    const res = await fetch("/api/content/book-pages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        book,
-        page: currentPage,
-        pageSize: savePageSize,
-        content: editedPageContent,
-      }),
-    });
-
-    if (!res.ok) {
-      let message = "Ошибка при сохранении страницы";
-      try {
-        const errorPayload = await res.json();
-        if (errorPayload?.error) message = errorPayload.error;
-      } catch {
-        // Keep the generic message when the server response is not JSON.
-      }
-      alert(message);
-      return;
+    let res;
+    try {
+      res = await fetch("/api/content/book-pages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/x-ndjson",
+        },
+        body: JSON.stringify({
+          book,
+          page: currentPage,
+          pageSize: savePageSize,
+          content: editedPageContent,
+        }),
+      });
+    } catch (error) {
+      console.error("Save request interrupted:", error);
+      throw new Error("Соединение прервано. Проверьте состояние книги перед повторным сохранением.");
     }
 
-    await loadPageDocument(currentPage, savePageSize);
+    await readProgressResponse(
+      res,
+      setSaveProgress,
+      "Ошибка при сохранении страницы",
+      "Соединение прервано. Проверьте состояние книги перед повторным сохранением.",
+    );
 
+    setSaveProgress({ stage: "Обновление страницы", percent: 95 });
+    if (!(await loadPageDocument(currentPage, savePageSize))) {
+      alert("Книга сохранена, но не удалось обновить страницу. Проверьте содержимое перед повторным сохранением.");
+      return false;
+    }
+
+    setSaveProgress({ stage: "Сохранено", percent: 100 });
     alert("Сохранено успешно!");
+    return true;
+  }
+
+  async function saveAndExit() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaveProgress({ stage: "Отправка данных", percent: null });
+    setIsSaving(true);
+    try {
+      if (await save()) setEdit(false);
+    } catch (error) {
+      console.error("Failed to save book:", error);
+      alert(error.message || "Ошибка при сохранении страницы");
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
   }
 
   async function reloadCurrentBook() {
@@ -988,6 +1024,22 @@ export default function Reader() {
 
   return (
     <>
+      <Dialog open={isSaving} disableEscapeKeyDown aria-labelledby="book-save-title" fullWidth maxWidth="xs">
+        <DialogTitle id="book-save-title">Сохранение книги</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>Пожалуйста, подождите и не закрывайте страницу.</Typography>
+          <Typography variant="body2" aria-live="polite">
+            {saveProgress.stage}
+            {saveProgress.percent !== null ? ` — примерно ${saveProgress.percent}%` : ""}
+          </Typography>
+          <LinearProgress
+            aria-label="Сохранение книги"
+            variant={saveProgress.percent === null ? "indeterminate" : "determinate"}
+            value={saveProgress.percent === null ? undefined : saveProgress.percent}
+          />
+        </DialogContent>
+      </Dialog>
+
       {isLoaded ? (
         !edit && (
           <Search
@@ -1021,10 +1073,7 @@ export default function Reader() {
           onDeleteTerm={openDeleteThesaurusTermDialog}
           onEditSynonyms={openSynonymsDialog}
           termEditorMode={isThesaurus && thesaurusEditorOpen}
-          save={() => {
-            save();
-            setEdit(false);
-          }}
+          save={saveAndExit}
         />
       ) : null}
 
@@ -1102,7 +1151,7 @@ export default function Reader() {
           <Box sx={{ mt: { xs: 4, md: 3 } }}>
             <EditorContent editor={editor} />
             <Box sx={{ mt: 2, display: "flex", gap: 1 }}>
-              <Button variant="contained" color="success" onClick={() => { save(); setEdit(false); }}>
+              <Button variant="contained" color="success" onClick={saveAndExit}>
                 Сохранить термин
               </Button>
               <Button

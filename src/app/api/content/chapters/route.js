@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import dbConnect from "@/lib/db";
+import dbConnect, { getContentVersion } from "@/lib/db";
 import mongoose from "mongoose";
 import { GridFSBucket } from "mongodb";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 
 const chapterCache = new Map();
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -94,7 +95,7 @@ export async function PUT(req) {
   }
 }
 
-export async function saveChapter(book, section, content) {
+export async function saveChapter(book, section, content, onProgress) {
   chapterCache.delete(`${book}_${section}`);
 
   const conn = await dbConnect();
@@ -102,41 +103,42 @@ export async function saveChapter(book, section, content) {
   const bucket = new GridFSBucket(db);
   const filename = `${book}_${section}`;
 
-  const stream = Readable.from([content]);
+  function* contentChunks() {
+    const data = Buffer.from(content, "utf8");
+    const chunkSize = 64 * 1024;
+    for (let offset = 0; offset < data.length; offset += chunkSize) {
+      const end = Math.min(offset + chunkSize, data.length);
+      yield data.subarray(offset, end);
+      onProgress(end / data.length);
+    }
+  }
+
+  const stream = onProgress
+    ? Readable.from(contentChunks(), { objectMode: false })
+    : Readable.from([content]);
   const uploadStream = bucket.openUploadStream(filename, {
     metadata: { book, section },
   });
 
-  return new Promise((resolve, reject) => {
-    stream
-      .pipe(uploadStream)
-      .on("error", reject)
-      .on("finish", async () => {
-        try {
-          const versions = await bucket.find({ filename }).toArray();
-
-          await Promise.all(
-            versions
-              .filter((file) => String(file._id) !== String(uploadStream.id))
-              .map((file) => bucket.delete(file._id)),
-          );
-
-          resolve(section);
-        } catch (error) {
-          reject(error);
-        }
-      });
-  });
+  await pipeline(stream, uploadStream);
+  const versions = await bucket.find({ filename }).toArray();
+  await Promise.all(
+    versions
+      .filter((file) => String(file._id) !== String(uploadStream.id))
+      .map((file) => bucket.delete(file._id)),
+  );
+  return section;
 }
 
 export async function loadChapter(book, section) {
   const key = `${book}_${section}`;
   console.log(`start ${key}`);
 
+  const version = await getContentVersion();
   const cached = chapterCache.get(key);
   const now = Date.now();
 
-  if (cached && now - cached.timestamp < ONE_DAY_MS) {
+  if (cached && cached.version === version && now - cached.timestamp < ONE_DAY_MS) {
     console.log(`Chapter from cache ${book}_${section}`);
     return cached.data;
   }
@@ -159,7 +161,7 @@ export async function loadChapter(book, section) {
           const buffer = Buffer.concat(chunks);
           const data = JSON.parse(buffer.toString("utf-8"));
 
-          chapterCache.set(key, { data, timestamp: now });
+          chapterCache.set(key, { data, timestamp: now, version });
           console.log(`end ${key}`);
           resolve(data);
         } catch (e) {

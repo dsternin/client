@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import dbConnect from "@/lib/db";
+import dbConnect, { getContentVersion } from "@/lib/db";
 import mongoose from "mongoose";
 import {
   THESAURUS_BOOK_LABEL,
@@ -51,9 +51,12 @@ const chapterCache = new Map();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function getBookChaptersWithTitles(bookDoc) {
+  const version = await getContentVersion();
+  const sections = JSON.stringify(bookDoc.chapters);
   const cacheEntry = chapterCache.get(bookDoc.name);
   const now = Date.now();
-  if (cacheEntry && now - cacheEntry.timestamp < CACHE_TTL_MS) {
+  if (cacheEntry && cacheEntry.version === version && cacheEntry.sections === sections &&
+    now - cacheEntry.timestamp < CACHE_TTL_MS) {
     console.log("toc from cache", "bookDoc.name");
     return cacheEntry.data;
   }
@@ -80,6 +83,8 @@ export async function getBookChaptersWithTitles(bookDoc) {
   chapterCache.set(bookDoc.name, {
     timestamp: now,
     data: result,
+    version,
+    sections,
   });
   return result;
 }
